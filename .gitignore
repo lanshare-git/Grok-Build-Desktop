@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Build outputs (regenerable via npm run build / npm run dist)
+out/
+dist/
+dist-v*/
+release/
+app/
+
+# Electron / Vite cache
+.vite/
+
+# Logs
+*.log
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+
+# Local tool & agent state
+.workbuddy/
+.workbuddy-ai/
