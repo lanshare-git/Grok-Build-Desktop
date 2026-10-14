@@ -1,15 +1,15 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
-import { applyPermissionModeToSession, changeConfigOption, chooseWorkspace, newSession } from '../actions'
+import { applyPermissionModeToSession, changeConfigOption, chooseWorkspace } from '../actions'
 import { useStore } from '../store'
-import { formatNumber, isLockedChat, sameDir, sessionDisplayTitle } from '../utils'
+import { formatNumber, isLockedChat, sessionDisplayTitle } from '../utils'
 import type { PermissionMode } from '@shared/types'
 import { PERMISSION_MODE_OPTIONS } from '@shared/types'
+import DirPickerMenu from './DirPickerMenu'
 import { IconFolder, IconPlus } from './Icons'
 
 export default function Header(): JSX.Element {
   const session = useStore((s) => s.sessions.find((x) => x.id === s.activeId))
-  const defaultCwd = useStore((s) => s.cwd)
   const homeDir = useStore((s) => s.homeDir)
   const permissionMode = useStore((s) => s.permissionMode)
   const setPermissionMode = useStore((s) => s.setPermissionMode)
@@ -18,6 +18,9 @@ export default function Header(): JSX.Element {
 
   const [renaming, setRenaming] = useState(false)
   const [draft, setDraft] = useState('')
+  /** 「+」新建任务的目录选择弹层 */
+  const [dirMenuOpen, setDirMenuOpen] = useState(false)
+  const newTaskRef = useRef<HTMLButtonElement | null>(null)
 
   if (!session) return <div className="header" />
 
@@ -81,7 +84,12 @@ export default function Header(): JSX.Element {
             {title}
           </div>
         )}
-        <button className="icon-btn" title="新建任务" onClick={() => void newSession()}>
+        <button
+          ref={newTaskRef}
+          className="icon-btn"
+          title="新建任务（选择工作目录）"
+          onClick={() => setDirMenuOpen((v) => !v)}
+        >
           <IconPlus size={13} />
         </button>
         <button
@@ -99,11 +107,6 @@ export default function Header(): JSX.Element {
           <IconFolder size={13} />
           {session.cwd}
         </button>
-        {defaultCwd && !sameDir(defaultCwd, session.cwd) && (
-          <span className="chip chip-default" title={`新建任务将默认使用：${defaultCwd}`}>
-            新任务默认：{defaultCwd}
-          </span>
-        )}
       </div>
 
       <div className="header-right">
@@ -186,6 +189,10 @@ export default function Header(): JSX.Element {
           )}
         </button>
       </div>
+
+      {dirMenuOpen && (
+        <DirPickerMenu anchor={newTaskRef.current} onClose={() => setDirMenuOpen(false)} />
+      )}
     </header>
   )
 }

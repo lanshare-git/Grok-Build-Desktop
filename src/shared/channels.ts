@@ -89,6 +89,10 @@ export const CH = {
   closeActionGet: 'config:close-action-get',
   closeActionSet: 'config:close-action-set',
 
+  /* 删除确认弹窗的默认值：是否默认勾选「同时删除磁盘文件」 */
+  deletePurgeDefaultGet: 'config:delete-purge-default-get',
+  deletePurgeDefaultSet: 'config:delete-purge-default-set',
+
   /* 账号：读取当前登录信息 / 退出登录 */
   accountGet: 'account:get',
   accountLogout: 'account:logout',

@@ -4,7 +4,6 @@ import {
   cleanError,
   connectAgent,
   newChatSession,
-  newSession,
   refreshAccount,
   refreshDiagnostics,
   refreshEnvInfo,
@@ -181,7 +180,7 @@ export default function App(): JSX.Element {
           {activeId ? (
             <ChatView key={activeId} />
           ) : (
-            <Welcome onCreate={() => void newSession()} onChat={() => void newChatSession()} />
+            <Welcome onChat={() => void newChatSession()} />
           )}
           {/* 右下角全局提示：其它任务的授权/提问、agent 连接异常 */}
           <ToastStack />

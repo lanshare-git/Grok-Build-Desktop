@@ -96,12 +96,18 @@ export interface GrokDesktopApi {
    * **不做不可逆直删**：优先系统回收站（`method:'trash'`），
    * 系统回收站不可用时移入应用内回收站（`method:'quarantine'`，见 `quarantinePath`）。
    * 只删该会话目录，不动其它会话。`{ ok:false, error:'not-found' }` = 磁盘上本来就没有。
+   *
+   * **成败口径 = 原路径还有没有真数据**（不是「有没有抛异常」）：删完后原目录只剩
+   * 一个不含数据的空壳（grok 占用导致目录本身删不掉）时仍算成功，空壳路径放进
+   * `staleShell` 供界面如实提示，主进程也会顺手清一次。
    */
   sessionDeleteData(args: { cwd: string; sessionId: string }): Promise<{
     ok: boolean
     path?: string
     method?: 'trash' | 'quarantine'
     quarantinePath?: string
+    /** ok=true 但原路径残留了「不含会话数据」的空壳目录 */
+    staleShell?: string
     error?: string
   }>
   /**
@@ -253,6 +259,12 @@ export interface GrokDesktopApi {
   getCloseAction(): Promise<CloseAction | null>
   /** 写入行为；传 null 表示「每次询问」 */
   setCloseAction(action: CloseAction | null): Promise<void>
+
+  /* 删除会话的默认行为配置 */
+  /** 读取删除确认弹窗里「同时删除磁盘文件」是否默认勾选（默认 true） */
+  getDeletePurgeDefault(): Promise<boolean>
+  /** 写入该默认值 */
+  setDeletePurgeDefault(value: boolean): Promise<void>
   /** 主进程隐藏窗口到托盘 */
   hideWindow(): Promise<void>
   /** 主进程标记退出并真正退出应用 */

@@ -427,6 +427,14 @@ export function registerIpc(service: AgentService): void {
     }
   )
 
+  /* ---------- 删除会话的默认行为 ---------- */
+  // 删除确认弹窗里「同时删除磁盘文件」是否默认勾选（默认 true，即历史行为）
+  ipcMain.handle(CH.deletePurgeDefaultGet, (): boolean => readConfig().deleteDiskFilesByDefault)
+
+  ipcMain.handle(CH.deletePurgeDefaultSet, (_e, value: boolean): void => {
+    writeConfig({ deleteDiskFilesByDefault: value })
+  })
+
   // 渲染层弹窗里选择「隐藏到托盘」后调用：把窗口藏到托盘
   ipcMain.handle(CH.windowHide, () => hideWindow())
 

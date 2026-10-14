@@ -1,3 +1,5 @@
+import { memo } from 'react'
+
 import type { ChatItem } from '@shared/types'
 import { IconList } from './Icons'
 
@@ -10,7 +12,7 @@ const STATUS_TEXT: Record<string, string> = {
   cancelled: '已取消'
 }
 
-export default function PlanPanel({ item }: { item: PlanItem }): JSX.Element {
+function PlanPanelImpl({ item }: { item: PlanItem }): JSX.Element {
   if (!item.entries?.length) return <></>
 
   return (
@@ -31,3 +33,6 @@ export default function PlanPanel({ item }: { item: PlanItem }): JSX.Element {
     </div>
   )
 }
+
+/** memo：重放时每批 update 都会重渲整张列表，未变化的条目引用稳定，memo 可直接跳过 */
+export default memo(PlanPanelImpl)

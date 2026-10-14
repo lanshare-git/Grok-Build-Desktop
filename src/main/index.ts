@@ -72,16 +72,43 @@ function createWindow(): void {
   }
 }
 
-app.whenReady().then(() => {
-  registerAssetProtocol()
-  registerIpc(service)
-  createWindow()
-  createTray(mainWindow!, service)
+/**
+ * 单实例锁 —— 本应用必须单实例运行。
+ *
+ * 本应用是「托盘常驻 + 关窗=最小化到托盘」的形态：用户点了 ✕，窗口只是藏进托盘，
+ * 很容易以为已经退出、又去双击一次 exe，于是起来第二个实例。两个实例共用同一份
+ * userData（config.json + localStorage 里的会话列表），会互相覆盖 ——
+ * 一边删了会话、另一边列表还留着死条目，点开就是 `session/load 失败：Path not found`。
+ *
+ * 拿不到锁的进程立刻退出（不建窗口/托盘/agent）；已在运行的那个实例把窗口唤到前台。
+ */
+const gotTheLock = app.requestSingleInstanceLock()
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+if (!gotTheLock) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    // 有人又启动了一次：把现有窗口恢复并聚焦，而不是新开一个
+    if (!mainWindow) {
+      createWindow()
+      return
+    }
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    if (!mainWindow.isVisible()) mainWindow.show()
+    mainWindow.focus()
   })
-})
+
+  app.whenReady().then(() => {
+    registerAssetProtocol()
+    registerIpc(service)
+    createWindow()
+    createTray(mainWindow!, service)
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    })
+  })
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()

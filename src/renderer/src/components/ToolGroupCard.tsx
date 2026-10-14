@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { memo, useState } from 'react'
 
 import type { ChatItem } from '@shared/types'
 import { toolIconName } from '../utils'
@@ -17,7 +17,7 @@ type ToolItem = Extract<ChatItem, { kind: 'tool' }>
  *  - 只有 ≥2 张才值得合并，单张仍走普通 ToolCallCard
  *  - 组卡默认收起，展开后逐张渲染（每张卡仍可单独展开）
  */
-export default function ToolGroupCard({ items }: { items: ToolItem[] }): JSX.Element {
+function ToolGroupCardImpl({ items }: { items: ToolItem[] }): JSX.Element {
   const [open, setOpen] = useState(false)
 
   const first = items[0]
@@ -63,3 +63,6 @@ export default function ToolGroupCard({ items }: { items: ToolItem[] }): JSX.Ele
     </div>
   )
 }
+
+/** memo：重放时每批 update 都会重渲整张列表，未变化的条目引用稳定，memo 可直接跳过 */
+export default memo(ToolGroupCardImpl)

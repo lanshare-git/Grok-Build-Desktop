@@ -134,6 +134,8 @@ const api: GrokDesktopApi = {
   /* 关闭行为配置 */
   getCloseAction: () => ipcRenderer.invoke(CH.closeActionGet),
   setCloseAction: (action: CloseAction | null) => ipcRenderer.invoke(CH.closeActionSet, action),
+  getDeletePurgeDefault: () => ipcRenderer.invoke(CH.deletePurgeDefaultGet),
+  setDeletePurgeDefault: (value: boolean) => ipcRenderer.invoke(CH.deletePurgeDefaultSet, value),
   hideWindow: () => ipcRenderer.invoke(CH.windowHide),
   quitApp: () => ipcRenderer.invoke(CH.appQuit),
 

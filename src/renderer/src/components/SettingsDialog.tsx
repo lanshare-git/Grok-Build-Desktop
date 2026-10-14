@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react'
 
 import {
   getCloseAction,
+  getDeletePurgeDefault,
   loginGrok,
   logoutAccount,
   refreshAccount,
   refreshMcp,
   setCloseAction,
+  setDeletePurgeDefault,
   setToolCallDensity
 } from '../actions'
 import { useStore } from '../store'
@@ -135,14 +137,22 @@ export default function SettingsDialog(): JSX.Element | null {
  * ------------------------------------------------------------------ */
 function GeneralSettings(): JSX.Element {
   const [closeAction, setCloseActionState] = useState<CloseAction | null>(null)
+  /** 删除弹窗里「同时删除磁盘文件」是否默认勾选（默认 true，与历史行为一致） */
+  const [purgeDefault, setPurgeDefaultState] = useState(true)
 
   useEffect(() => {
     void getCloseAction().then(setCloseActionState)
+    void getDeletePurgeDefault().then(setPurgeDefaultState)
   }, [])
 
   const choose = async (action: CloseAction | null): Promise<void> => {
     await setCloseAction(action)
     setCloseActionState(action)
+  }
+
+  const choosePurge = async (value: boolean): Promise<void> => {
+    await setDeletePurgeDefault(value)
+    setPurgeDefaultState(value)
   }
 
   return (
@@ -179,6 +189,34 @@ function GeneralSettings(): JSX.Element {
         </div>
         <div className="mcp-hint">
           选「每次询问」后，下次点击关闭会再次弹出询问窗口；其余选项会记住你的选择。
+        </div>
+      </div>
+
+      {/* 删除会话：确认弹窗里「同时删除磁盘文件」的默认勾选状态 */}
+      <div className="settings-group">
+        <div className="settings-row">
+          <div className="settings-row-label">
+            <span className="settings-row-title">删除会话时</span>
+            <span className="settings-row-desc">确认弹窗里「同时删除磁盘文件」的默认状态</span>
+          </div>
+          <div className="close-action-setting is-seg">
+            <button
+              className={`seg ${purgeDefault ? 'is-active' : ''}`}
+              onClick={() => void choosePurge(true)}
+            >
+              默认勾选
+            </button>
+            <button
+              className={`seg ${!purgeDefault ? 'is-active' : ''}`}
+              onClick={() => void choosePurge(false)}
+            >
+              默认不勾
+            </button>
+          </div>
+        </div>
+        <div className="mcp-hint">
+          勾选「同时删除磁盘文件」会一并删掉该会话的磁盘数据（先送系统回收站，不可用时移入应用内
+          回收站，仍可找回）。改成「默认不勾」后，弹窗默认只把会话从列表移除，要连磁盘一起删需自己勾。
         </div>
       </div>
 

@@ -1,3 +1,5 @@
+import { memo, useMemo } from 'react'
+
 import type { ChatItem, ToolStatus } from '@shared/types'
 import { densityHidesShellSummary } from '@shared/types'
 import { useStore } from '../store'
@@ -20,7 +22,7 @@ function StatusGlyph({ status }: { status: ToolStatus }): JSX.Element {
   return <span className="status-idle" />
 }
 
-export default function ToolCallCard({ item }: { item: ToolItem }): JSX.Element {
+function ToolCallCardImpl({ item }: { item: ToolItem }): JSX.Element {
   // 展开态存在 store 里，跨会话/跨重启记忆。语义是「覆盖集合优先，其次按密度默认态」
   //（详细档默认展开，其余档默认折叠）—— 见 store.isToolCallExpanded。
   // ⚠️ selector 必须返回 boolean 原始值 —— zustand 用 Object.is 比较，
@@ -45,8 +47,22 @@ export default function ToolCallCard({ item }: { item: ToolItem }): JSX.Element 
   const isShell = iconName === 'terminal'
   const showSummary =
     !!summary && !summary.trimStart().startsWith('{') && !(isShell && densityHidesShellSummary(density))
-  const inputText = stringifyPretty(item.input)
-  const outputText = stringifyPretty(item.output)
+
+  /**
+   * ⚠️ 性能关键（实测过，别改回无条件计算）：
+   * `stringifyPretty` 内部是**完整**的 `JSON.stringify(value, null, 2)`（再截断到 6000 字符），
+   * 输入/输出里常常是几十 KB 的工具原始载荷。折叠态这两个串**根本用不到**，
+   * 但此前每次渲染都会算 —— 用真实会话测：215 张工具卡跑一轮 **40~135ms**（中位 61ms）。
+   * 切换会话时重放会分多批到达，每批都让整张列表重渲染一次，
+   * 于是每批都白烧 60ms+，叠加 React 提交/布局后单次长任务达 150~230ms、
+   * 累计 1s 左右 —— 表现就是「切换会话后输入框一段时间打不动字」。
+   * 现在：输入只在展开时算；输出只在展开、或折叠态就要显示失败原因时算。
+   */
+  const inputText = useMemo(() => (open ? stringifyPretty(item.input) : ''), [open, item.input])
+  const outputText = useMemo(
+    () => (open || item.status === 'failed' ? stringifyPretty(item.output) : ''),
+    [open, item.status, item.output]
+  )
 
   return (
     <div className={`tool-card tool-${item.status}`}>
@@ -113,3 +129,10 @@ export default function ToolCallCard({ item }: { item: ToolItem }): JSX.Element 
     </div>
   )
 }
+
+/**
+ * memo 化的理由：切换会话重放历史时，每批 update 都会让 ChatView 重渲染整张列表。
+ * store 侧 `upsertTool` 对**未变化**的条目保持同一对象引用（只替换被更新的那一条），
+ * 所以 memo 能真正跳过那 200 多张没变的卡片的 render —— 这正是每批 60ms+ 白算的来源。
+ */
+export default memo(ToolCallCardImpl)

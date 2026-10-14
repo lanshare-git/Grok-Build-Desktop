@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import {
   addWorkspaceDir,
+  cleanError,
+  getDeletePurgeDefault,
   moveSessionToWorkspace,
   newChatSession,
   newSession,
@@ -23,6 +25,7 @@ import type { SessionMeta, SessionSearchHit } from '@shared/types'
 import ConfirmDialog from './ConfirmDialog'
 import type { ConfirmSpec } from './ConfirmDialog'
 import AccountMenu from './AccountMenu'
+import DirPickerMenu from './DirPickerMenu'
 import SessionToolsMenu from './SessionToolsMenu'
 import {
   IconBox,
@@ -80,7 +83,7 @@ export default function Sidebar(): JSX.Element {
   const [hint, setHint] = useState<string | null>(null)
   /** 删除前的二次确认弹窗 */
   const [confirm, setConfirm] = useState<ConfirmSpec | null>(null)
-  /** 删除会话时是否连磁盘一起删（默认勾选，记住本次运行内的选择） */
+  /** 删除会话时是否连磁盘一起删（初值来自设置中心的配置，默认 true；记住本次运行内的改动） */
   const [purgeOnDelete, setPurgeOnDelete] = useState(true)
   /** 悬停详情卡（延迟弹出，鼠标移开即收） */
   const [preview, setPreview] = useState<PreviewSpec | null>(null)
@@ -88,6 +91,9 @@ export default function Sidebar(): JSX.Element {
   /** 左下角账号菜单的展开状态与锚点（头像行按钮） */
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const accountRef = useRef<HTMLButtonElement | null>(null)
+  /** 「新建任务」的目录选择弹层（锚点为顶部新建按钮） */
+  const [dirMenuOpen, setDirMenuOpen] = useState(false)
+  const newTaskRef = useRef<HTMLButtonElement | null>(null)
   /** 会话搜索：查询词 + 主进程返回的命中（标题命中优先，其次正文片段） */
   const [query, setQuery] = useState('')
   const [hits, setHits] = useState<SessionSearchHit[] | null>(null)
@@ -99,6 +105,18 @@ export default function Sidebar(): JSX.Element {
    */
   const [dragSessionId, setDragSessionId] = useState<string | null>(null)
   const [dropKey, setDropKey] = useState<string | null>(null)
+
+  // 删除弹窗里「同时删除磁盘文件」的初值来自设置中心（默认 true）。
+  // 挂载时读一次即可：用户若在设置里改过，下次打开弹窗就是新默认值。
+  useEffect(() => {
+    let alive = true
+    void getDeletePurgeDefault().then((v) => {
+      if (alive) setPurgeOnDelete(v)
+    })
+    return () => {
+      alive = false
+    }
+  }, [])
 
   // 搜索：防抖 220ms 触发，且**只搜前 120 个会话**（侧栏本身最多保留 60 个会话元数据，
   // 顺序即活动排序，足够覆盖「最近做过的事」）。正文扫描在主进程侧流式进行。
@@ -304,6 +322,21 @@ export default function Sidebar(): JSX.Element {
   async function runRemoveSession(session: SessionMeta, purge: boolean): Promise<void> {
     const title = sessionDisplayTitle(session)
     if (purge && !session.isDraft) {
+      // **删除前先卸载会话**：grok agent 还持有它时，落盘目录会被占用 ——
+      // 一级回收站/二级搬移都可能被句柄拦下；更糟的是删完 grok 会把目录**重建为空壳**，
+      // 留下「看着在、点开报 Path not found」的死条目（2026-10-14 事故）。
+      // 与 moveSessionToWorkspace 的先卸载策略保持一致。
+      const store = useStore.getState()
+      if (store.loadedSessions.includes(session.id)) {
+        try {
+          await window.grok.closeSession(session.id)
+        } catch (err) {
+          // 卸载失败不放弃删除：删不掉会走下面的失败分支，如实告知
+          store.pushLog(`[session-delete] 卸载会话失败：${cleanError(err)}\n`)
+        }
+        store.forgetLoadedSession(session.id)
+      }
+
       const res = await purgeSessionData(session)
       if (!res.ok) {
         // 删不掉时**不自动**降级成「只移列表」：那会给人「已经删干净了」的错觉，
@@ -335,7 +368,14 @@ export default function Sidebar(): JSX.Element {
         return
       }
       removeSession(session.id)
-      if (res.method === 'quarantine') {
+      if (res.staleShell) {
+        // 数据确实删掉了，只是原目录留了个删不掉的空壳（grok 占用）。如实说明，
+        // 别让用户以为「没删干净」——主进程已经尽力清过一次。
+        useStore
+          .getState()
+          .pushLog(`[session-delete] 原目录残留空壳（不含数据）：${res.staleShell}`)
+        flash(`已删除会话「${title}」（原目录残留空壳，不影响使用）`)
+      } else if (res.method === 'quarantine') {
         // 真出现这条说明系统回收站删不掉（且文件确实还在）。落点写进日志，方便找回。
         useStore
           .getState()
@@ -359,7 +399,7 @@ export default function Sidebar(): JSX.Element {
   /**
    * 在工作目录的 git worktree 里开新任务（终端 `grok -w`）。
    * worktree 由 grok 建于 ~/.grok/worktrees/ 下，会话的工作目录就是那份独立副本，
-   * 因此与主仓库互不干扰；清单与清理在设置中心「存储与维护」里。
+   * 因此与主仓库互不干扰；清单与清理在设置中心「Worktree」里。
    */
   const askWorktree = (group: WorkspaceGroup): void => {
     setConfirm({
@@ -370,7 +410,7 @@ export default function Sidebar(): JSX.Element {
         </>
       ),
       detail:
-        '与主仓库的改动互不干扰（worktree 名由 grok 自动生成）。目标目录需要是 git 仓库。清单与清理在「设置 → 存储与维护」。',
+        '与主仓库的改动互不干扰（worktree 名由 grok 自动生成）。目标目录需要是 git 仓库。清单与清理在「设置 → Worktree」。',
       confirmText: '创建并新建',
       cancelText: '取消',
       onConfirm: () => {
@@ -474,7 +514,11 @@ export default function Sidebar(): JSX.Element {
 
   return (
     <aside className="sidebar">
-      <button className="btn btn-primary btn-block" onClick={() => void newSession()}>
+      <button
+        ref={newTaskRef}
+        className="btn btn-primary btn-block"
+        onClick={() => setDirMenuOpen((v) => !v)}
+      >
         <IconPlus />
         新建任务
       </button>
@@ -943,6 +987,9 @@ export default function Sidebar(): JSX.Element {
       {confirm && <ConfirmDialog spec={confirm} onClose={() => setConfirm(null)} />}
       {accountMenuOpen && (
         <AccountMenu anchor={accountRef.current} onClose={() => setAccountMenuOpen(false)} />
+      )}
+      {dirMenuOpen && (
+        <DirPickerMenu anchor={newTaskRef.current} onClose={() => setDirMenuOpen(false)} />
       )}
     </aside>
   )

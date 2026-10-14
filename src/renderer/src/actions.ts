@@ -26,6 +26,8 @@ export interface PurgeSessionResult {
   method?: 'trash' | 'quarantine'
   /** method='quarantine' 时的落点，便于在提示里告诉用户去哪找回 */
   quarantinePath?: string
+  /** ok=true 但原路径残留了（不含数据的）空壳目录 */
+  staleShell?: string
   /** ok=false 时给用户看的失败原因 */
   reason?: string
 }
@@ -34,6 +36,9 @@ export interface PurgeSessionResult {
  * 删除会话在磁盘上的落盘目录（`~/.grok/sessions/<编码cwd>/<sessionId>`）。
  * 主进程优先走系统回收站，不可用时移入应用内回收站；两级都不做不可逆直删。
  * 草稿会话（磁盘上没有文件）与「已经不存在」都视为成功。
+ *
+ * ⚠️ 调用方**应先卸载会话**（`session/close` + `forgetLoadedSession`）：grok 持有会话时
+ * 目录会被占用，既可能删不掉、又会被它在删完后重建为空壳（2026-10-14 事故）。
  */
 export async function purgeSessionData(session: {
   id: string
@@ -43,7 +48,9 @@ export async function purgeSessionData(session: {
   if (session.isDraft) return { ok: true }
   try {
     const res = await window.grok.sessionDeleteData({ cwd: session.cwd, sessionId: session.id })
-    if (res.ok) return { ok: true, method: res.method, quarantinePath: res.quarantinePath }
+    if (res.ok) {
+      return { ok: true, method: res.method, quarantinePath: res.quarantinePath, staleShell: res.staleShell }
+    }
     if (res.error === 'not-found') return { ok: true }
     return { ok: false, reason: res.error ?? '未知错误' }
   } catch (err) {
@@ -189,7 +196,7 @@ export async function chooseWorkspace(): Promise<void> {
   // 旧会话若是刚建出来还没说过话的空壳，切目录后顺手清掉，免得堆垃圾
   const emptyPrevId = current && current.items.length === 0 ? current.id : null
 
-  await newSession()
+  await newSession(dir)
 
   const after = useStore.getState()
   // 新建失败（连接异常）就保留现场，先把错误暴露出来
@@ -210,13 +217,14 @@ export async function addWorkspaceDir(): Promise<void> {
 /**
  * 新建会话：先只建一个「本地草稿」（不调 grok 的 session/new，磁盘不落文件），
  * 用户首次发送时再由 sendPrompt 真正 newSession 并 materialize。
- * 传入 cwd 时以该目录为根（侧栏分组头的「＋」用），否则沿用默认目录。
+ * 传入 cwd 时以该目录为根（侧栏分组头的「＋」用）；不传时每次弹目录选择框，
+ * 由用户当场选定（取消则放弃新建），不再静默沿用全局默认目录。
  * kind 为展示层标记（当前仅 'chat'）：纯聊天会话不绑定项目，以主目录为根。
  */
 export async function newSession(cwd?: string, kind?: 'chat', permissionMode?: PermissionMode): Promise<void> {
   const store = useStore.getState()
 
-  let target = cwd || store.cwd
+  let target = cwd
   if (!target) {
     const picked = await chooseCwd()
     if (!picked) return
@@ -278,7 +286,18 @@ export async function resumeSession(sessionId: string, cwd: string): Promise<voi
  // 绝不能靠「队列瞬时为空」判断（update 还在路上时会提前宣告完成）。
     finishReplayIfIdle(sessionId, res?.replayed ?? 0)
   } catch (err) {
-    useStore.getState().appendNotice(sessionId, `恢复会话失败：${cleanError(err)}`, 'error')
+    const raw = cleanError(err)
+    // grok 按「编码 cwd + 会话 ID」拼路径找会话：磁盘上那份数据被删/被搬走后，
+    // session/load 只会回一个 `Path not found (FS_NOT_FOUND)`。这时给用户能自助处理的
+    // 说明，而不是把协议层错误原样甩出去（2026-10-14 事故的可见症状就是这条报错）。
+    const missingOnDisk = /FS_NOT_FOUND|Path not found/i.test(raw)
+    useStore.getState().appendNotice(
+      sessionId,
+      missingOnDisk
+        ? '会话的磁盘数据已不存在（多半已被删除或移动过），无法恢复。可在侧栏删除这条记录，避免反复点开报错。'
+        : `恢复会话失败：${raw}`,
+      'error'
+    )
     // 失败路径必须无条件结束，否则「正在加载」会一直转
     useStore.getState().finishSessionReplay(sessionId)
   }
@@ -525,6 +544,21 @@ export async function getCloseAction(): Promise<CloseAction | null> {
 /** 写入「关闭时」的行为；传 null = 恢复「每次询问」 */
 export async function setCloseAction(action: CloseAction | null): Promise<void> {
   await window.grok.setCloseAction(action)
+}
+
+/* ------------------------------------------------------------------ *
+ *  删除会话的默认行为
+ *  删除确认弹窗里「同时删除磁盘文件」是否默认勾选（默认 true）。
+ * ------------------------------------------------------------------ */
+
+/** 读取删除确认弹窗的默认勾选状态 */
+export async function getDeletePurgeDefault(): Promise<boolean> {
+  return window.grok.getDeletePurgeDefault()
+}
+
+/** 写入删除确认弹窗的默认勾选状态 */
+export async function setDeletePurgeDefault(value: boolean): Promise<void> {
+  await window.grok.setDeletePurgeDefault(value)
 }
 
 /* ------------------------------------------------------------------ *

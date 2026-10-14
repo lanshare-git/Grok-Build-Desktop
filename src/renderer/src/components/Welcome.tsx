@@ -1,16 +1,17 @@
+import { useRef, useState } from 'react'
+
 import { useStore } from '../store'
+import DirPickerMenu from './DirPickerMenu'
 import { IconGrok, IconChat, IconPlus, IconSpark } from './Icons'
 
-export default function Welcome({
-  onCreate,
-  onChat
-}: {
-  onCreate: () => void
-  onChat?: () => void
-}): JSX.Element {
+export default function Welcome({ onChat }: { onChat?: () => void }): JSX.Element {
   const connection = useStore((s) => s.connection)
   const diagnostics = useStore((s) => s.diagnostics)
   const toggleDiagnostics = useStore((s) => s.toggleDiagnostics)
+
+  /** 「新建任务」的目录选择弹层 */
+  const [dirMenuOpen, setDirMenuOpen] = useState(false)
+  const createRef = useRef<HTMLButtonElement | null>(null)
 
   const failing = diagnostics?.checks.filter((c) => c.level === 'error') ?? []
 
@@ -61,7 +62,11 @@ export default function Welcome({
         )}
 
         <div className="welcome-actions">
-          <button className="btn btn-primary btn-lg" onClick={onCreate}>
+          <button
+            ref={createRef}
+            className="btn btn-primary btn-lg"
+            onClick={() => setDirMenuOpen((v) => !v)}
+          >
             <IconPlus />
             新建任务
           </button>
@@ -78,6 +83,10 @@ export default function Welcome({
           顶栏的路径按钮可切换目录，会在该目录下开启一个新会话。
         </p>
       </div>
+
+      {dirMenuOpen && (
+        <DirPickerMenu anchor={createRef.current} onClose={() => setDirMenuOpen(false)} />
+      )}
     </div>
   )
 }

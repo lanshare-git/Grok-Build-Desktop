@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react'
 
-import { cancelCurrent, sendPrompt } from '../actions'
+import { cancelCurrent, newSessionInWorktree, sendPrompt } from '../actions'
 import { useStore } from '../store'
-import { IconClose, IconImage, IconScissors, IconSend, IconStop } from './Icons'
+import ConfirmDialog from './ConfirmDialog'
+import type { ConfirmSpec } from './ConfirmDialog'
+import { IconBox, IconClose, IconImage, IconPlus, IconScissors, IconSend, IconStop } from './Icons'
 import type { AvailableCommand, ImageAttachment } from '@shared/types'
 
 interface Attachment extends ImageAttachment {
@@ -18,6 +20,9 @@ const uid = (): string =>
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
 
+/** 稳定空数组引用：selector 里不能现造 `[]`，否则每次渲染都是新引用 → 无限重渲染 */
+const EMPTY_COMMANDS: AvailableCommand[] = []
+
 /** /imagine-video 的参数选项（对照 xAI 视频模型能力；CLI 旗标语法以 grok 1.0.50 实际解析为准） */
 const VIDEO_DURATIONS = [5, 10, 15]
 const VIDEO_RATIOS = ['16:9', '9:16', '1:1', '4:3', '3:4', '3:2', '2:3']
@@ -32,7 +37,11 @@ const VIDEO_MODELS = ['grok-imagine-video-1.5', 'grok-imagine-video-1.5-lite', '
  */
 const SEED_COMMANDS: AvailableCommand[] = [
   { name: '/imagine', description: 'Generate an image from a text description' },
-  { name: '/imagine-video', description: 'Generate a video from a text description' }
+  { name: '/imagine-video', description: 'Generate a video from a text description' },
+  {
+    name: '/worktree',
+    description: '在独立的 git worktree 副本中新建任务（等价终端 grok -w），与主仓库互不干扰'
+  }
 ]
 
 export default function Composer(): JSX.Element {
@@ -44,7 +53,10 @@ export default function Composer(): JSX.Element {
   const running = useStore((s) => s.running.includes(activeId ?? ''))
   // 重放期间**不需要**任何 selector 或提示：输入框本来就不该被 disabled
   // （那正是「输入框卡死」的观感来源），顶部 2px 细线已足够说明「还在加载」。
-  const commands = useStore((s) => s.activeSession()?.commands ?? [])
+  // ⚠️ selector 只能返回**原始值/稳定引用**：`?? []` 每次都产生新数组 → zustand 判定变化 →
+  // 无限重渲染（无活动会话时必崩）。空态用模块级常量兜底。
+  const sessionCommands = useStore((s) => s.activeSession()?.commands)
+  const commands = sessionCommands ?? EMPTY_COMMANDS
   // agent 握手时上报的内置命令 + grok 内置技能（inspect）。
   // 少了这两个来源，用户在终端能用的 /compact、/deep-research、/learn、/review 等
   // 在客户端根本打不出来 —— 命令面板补全必须覆盖它们。
@@ -61,6 +73,38 @@ export default function Composer(): JSX.Element {
   // 补全面板：当前高亮项 + 是否被 Esc 关闭
   const [paletteIndex, setPaletteIndex] = useState(0)
   const [paletteDismissed, setPaletteDismissed] = useState(false)
+
+  // 在 worktree 中新建任务（等价终端 grok -w，入口是 /worktree 命令，不加按钮）
+  const cwd = useStore((s) => s.activeSession()?.cwd ?? s.cwd)
+  const [wtConfirm, setWtConfirm] = useState<ConfirmSpec | null>(null)
+  const [wtHint, setWtHint] = useState<string | null>(null)
+  const flashWt = (text: string): void => {
+    setWtHint(text)
+    window.setTimeout(() => setWtHint((current) => (current === text ? null : current)), 3600)
+  }
+
+  const askWorktree = (): void => {
+    if (!cwd) return
+    setWtConfirm({
+      title: '在 worktree 中新建任务？',
+      message: (
+        <>
+          将基于 <strong>{cwd}</strong> 创建一份独立的 git worktree，并在其中开新任务。
+        </>
+      ),
+      detail:
+        '与主仓库的改动互不干扰（worktree 名由 grok 自动生成）。目标目录需要是 git 仓库。清单与清理在「设置 → Worktree」。',
+      confirmText: '创建并新建',
+      cancelText: '取消',
+      onConfirm: () => {
+        void (async () => {
+          const res = await newSessionInWorktree({ cwd })
+          if (res.ok) flashWt(`已在 worktree 中新建任务：${res.path}`)
+          else flashWt(`创建 worktree 失败：${res.message ?? '未知错误'}`)
+        })()
+      }
+    })
+  }
 
   // 命令补全：种子 ∪ 会话级上报 ∪ agent 内置命令 ∪ grok 内置技能
   const allCommands = useMemo<AvailableCommand[]>(() => {
@@ -113,6 +157,29 @@ export default function Composer(): JSX.Element {
     setText('')
     setAttachments([])
   }, [activeId])
+
+  // 「+」菜单：输入区左侧只留一个按钮，其余工具收进下拉（不铺按钮）
+  const [menuOpen, setMenuOpen] = useState(false)
+  const toolsRef = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!menuOpen) return
+    const onDocDown = (e: MouseEvent): void => {
+      const node = e.target as Node
+      // 点在「+」按钮或菜单内部不算外部点击
+      if (toolsRef.current?.contains(node) || menuRef.current?.contains(node)) return
+      setMenuOpen(false)
+    }
+    const onKey = (e: globalThis.KeyboardEvent): void => {
+      if (e.key === 'Escape') setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onDocDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDocDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [menuOpen])
 
   /** 把图片 Blob 转成 base64 附件 */
   const addImageBlob = (blob: Blob, name?: string): void => {
@@ -172,6 +239,11 @@ export default function Composer(): JSX.Element {
   const submit = (): void => {
     const value = text.trim()
     if ((!value && attachments.length === 0) || running) return
+    // /worktree：客户端本地命令，不发给 agent —— 弹确认后创建 worktree 任务
+    if (/^\/worktree\b/i.test(value)) {
+      askWorktree()
+      return
+    }
     // /imagine-video：把生成参数拼成旗标附到提示词末尾（CLI 旗标语法以 grok 实际解析为准）
     let body = value
     if (isImagineVideo && includeParams) {
@@ -262,13 +334,61 @@ export default function Composer(): JSX.Element {
           ))}
         </div>
       )}
+      {wtHint && <div className="composer-hint">{wtHint}</div>}
       <div className="composer-box">
-        <div className="composer-tools">
-          <button className="tool-btn" title="上传图片" onClick={() => fileInputRef.current?.click()}>
-            <IconImage size={15} />
-          </button>
-          <button className="tool-btn" title="截图提问（截图后按 Ctrl+V 粘贴）" onClick={snip}>
-            <IconScissors size={15} />
+        {/* 「+」菜单挂在输入框上沿之上，避免压住输入框 */}
+        {menuOpen && (
+          <div className="composer-menu" role="menu" ref={menuRef}>
+            <button
+              type="button"
+              role="menuitem"
+              className="menu-item"
+              onClick={() => {
+                setMenuOpen(false)
+                fileInputRef.current?.click()
+              }}
+            >
+              <IconImage size={14} />
+              <span className="menu-label">上传图片</span>
+              <span className="menu-desc">发送前可在输入框上方预览</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="menu-item"
+              onClick={() => {
+                setMenuOpen(false)
+                snip()
+              }}
+            >
+              <IconScissors size={14} />
+              <span className="menu-label">截图提问</span>
+              <span className="menu-desc">截完在输入框 Ctrl+V 粘贴</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="menu-item"
+              onClick={() => {
+                setMenuOpen(false)
+                askWorktree()
+              }}
+            >
+              <IconBox size={14} />
+              <span className="menu-label">在 worktree 中新建任务</span>
+              <span className="menu-desc">独立代码副本 · 等价 grok -w</span>
+            </button>
+          </div>
+        )}
+        <div className="composer-tools" ref={toolsRef}>
+          <button
+            className={`tool-btn${menuOpen ? ' is-open' : ''}`}
+            title="添加图片、截图，或在 worktree 中新建任务"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((v) => !v)}
+          >
+            <IconPlus size={15} />
           </button>
           <input
             ref={fileInputRef}
@@ -373,6 +493,7 @@ export default function Composer(): JSX.Element {
           </label>
         </div>
       )}
+      {wtConfirm && <ConfirmDialog spec={wtConfirm} onClose={() => setWtConfirm(null)} />}
     </div>
   )
 }

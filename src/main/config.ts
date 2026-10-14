@@ -26,12 +26,20 @@ export interface AppConfig {
    *  - null：未配置，首次点关闭时弹窗询问并记住选择
    */
   closeAction: CloseAction | null
+  /**
+   * 侧栏删除会话时，确认弹窗里的「同时删除磁盘文件」是否**默认勾选**。
+   *  - true（默认）：弹窗一出来就勾上，等同历史行为；
+   *  - false：默认只从列表移除，要连磁盘一起删得自己勾。
+   * 会话数据一旦删除，只能去回收站找回，所以给用户一个改默认值的入口。
+   */
+  deleteDiskFilesByDefault: boolean
 }
 
 const DEFAULTS: AppConfig = {
   proxy: null,
   proxyAutoDetected: false,
-  closeAction: null
+  closeAction: null,
+  deleteDiskFilesByDefault: true
 }
 
 function configFile(): string {

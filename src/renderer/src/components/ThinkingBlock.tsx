@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { memo, useEffect, useState } from 'react'
 
 import type { ChatItem } from '@shared/types'
 import { densityCollapsesThinking } from '@shared/types'
@@ -7,7 +7,7 @@ import { IconBrain, IconChevron } from './Icons'
 
 type ThinkingItem = Extract<ChatItem, { kind: 'thinking' }>
 
-export default function ThinkingBlock({ item }: { item: ThinkingItem }): JSX.Element {
+function ThinkingBlockImpl({ item }: { item: ThinkingItem }): JSX.Element {
   // 「最紧凑」档默认收起（grok 的 compact-all-grouped 同义）；其余档保持可点开。
   const collapseByDefault = useStore((s) => densityCollapsesThinking(s.toolCallDensity))
   const [open, setOpen] = useState(() => !collapseByDefault)
@@ -31,3 +31,6 @@ export default function ThinkingBlock({ item }: { item: ThinkingItem }): JSX.Ele
     </div>
   )
 }
+
+/** memo：重放时每批 update 都会重渲整张列表，未变化的条目引用稳定，memo 可直接跳过 */
+export default memo(ThinkingBlockImpl)
