@@ -15,19 +15,32 @@ import { AcpClient } from './client'
 import { proxyEnv, readConfig } from '../config'
 import type {
   AcpToolCall,
+  AvailableCommand,
   ConnectionState,
+  GrokAnnouncement,
   InitializeResult,
   NewSessionOptions,
+  PermissionMode,
   PermissionRequestEvent,
   SessionNewResult,
-  SessionUpdateEnvelope
+  SessionUpdateEnvelope,
+  UserQuestionAnswers,
+  UserQuestionEvent,
+  UserQuestion
 } from '../../shared/types'
 
 export interface AgentServiceEvents {
   state: [{ state: ConnectionState; message?: string }]
   stream: [{ sessionId: string; update: SessionUpdateEnvelope }]
   permission: [PermissionRequestEvent]
+  question: [UserQuestionEvent]
   log: [string]
+  /**
+   * agent 自身的「元能力」：握手期上报的内置命令 + 运行期下发的公告。
+   * 两者 ACP 只在 initialize 响应/`_x.ai/announcements/update` 里给一次，
+   * 不接住就等于终端里的新功能在桌面端完全不可见。
+   */
+  meta: [{ commands: AvailableCommand[]; announcements: GrokAnnouncement[] }]
 }
 
 export function resolveGrokHome(): string {
@@ -72,14 +85,31 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   private permissionSeq = 1
   private pendingPermissions = new Map<number, (optionId: string | null) => void>()
 
+  private questionSeq = 1
+  private pendingQuestions = new Map<number, (answers: UserQuestionAnswers | null) => void>()
+
+  /**
+   * session/load 期间缓存重放的 session/update，加载完成后一次性下发。
+   * grok 会把历史逐条推成 session/update（实测 1.5MB 会话 = 184 条、铺开约 3 秒），
+   * 直接透传会让界面像打字机一样逐条加载，观感很差。
+   */
+  private replayBuffers = new Map<string, SessionUpdateEnvelope[]>()
+  private replayFlushTimers = new Map<string, NodeJS.Timeout>()
+  /** flushReplay 等待中的 resolver：stop() 时必须结算，否则 loadSession 会永久挂住 */
+  private replayFlushWaiters = new Map<string, () => void>()
+
   /** 当前 agent 进程内已创建/加载过的会话。进程重启后清空，prompt 前需 ensureSession */
   private knownSessions = new Set<string>()
 
-  private readonly autoApproveDefault: boolean
+  /** agent 上报的内置命令（initialize 的 availableCommands）与公告，供渲染层展示 */
+  private agentCommands: AvailableCommand[] = []
+  private announcements: GrokAnnouncement[] = []
 
-  constructor(options: { autoApprove?: boolean } = {}) {
+  private readonly permissionModeDefault: PermissionMode
+
+  constructor(options: { permissionMode?: PermissionMode } = {}) {
     super()
-    this.autoApproveDefault = options.autoApprove ?? true
+    this.permissionModeDefault = options.permissionMode ?? 'bypassPermissions'
   }
 
   get connectionState(): ConnectionState {
@@ -140,13 +170,27 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
 
     client.on('notification', ({ method, params }) => {
       if (method === 'session/update' && params?.sessionId && params?.update) {
-        this.emit('stream', {
-          sessionId: params.sessionId,
-          update: params.update as SessionUpdateEnvelope
-        })
-      } else {
-        this.log(`[notification] ${method}`)
+        const sessionId = String(params.sessionId)
+        const update = params.update as SessionUpdateEnvelope
+        // 正在 session/load 的会话：先缓存，等加载结束后统一下发
+        const buffer = this.replayBuffers.get(sessionId)
+        if (buffer) {
+          buffer.push(update)
+          return
+        }
+        this.emit('stream', { sessionId, update })
+        return
       }
+      // grok 的新功能/版本公告（终端里表现为启动横幅），桌面端转发给渲染层展示
+      if (method === '_x.ai/announcements/update') {
+        const list = (params as { announcements?: GrokAnnouncement[] } | undefined)?.announcements
+        if (Array.isArray(list) && list.length > 0) {
+          this.announcements = list
+          this.emitMeta()
+        }
+        return
+      }
+      this.log(`[notification] ${method}`)
     })
 
     client.on('request', (req) => this.handleIncomingRequest(req))
@@ -156,6 +200,9 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       this.initialized = false
       this.client = null
       this.knownSessions.clear()
+      // 进程退出时结算重放等待者：否则正在 await flushReplay 的 loadSession 会一直挂着
+      for (const [, settle] of this.replayFlushWaiters) settle()
+      this.replayFlushWaiters.clear()
       this.setState('stopped', `agent 进程已退出（code=${code ?? 'null'}）`)
     })
 
@@ -183,7 +230,28 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
 
     this.initialized = true
     this.setState('ready', 'agent 已就绪')
+
+    // 握手结果里带了一份内置命令清单（compact / context / session-info / deep-research …），
+    // 它只在 initialize 这一次返回，不接住渲染层就永远看不到。
+    const meta = init._meta as Record<string, unknown> | undefined
+    const announced = (meta?.availableCommands ?? (init as unknown as { availableCommands?: unknown })
+      .availableCommands) as AvailableCommand[] | undefined
+    if (Array.isArray(announced) && announced.length > 0) {
+      this.agentCommands = announced.filter((c) => typeof c?.name === 'string')
+      this.emitMeta()
+    }
+
     return init
+  }
+
+  /** 把 agent 上报的命令与公告推给渲染层 */
+  private emitMeta(): void {
+    this.emit('meta', { commands: this.agentCommands, announcements: this.announcements })
+  }
+
+  /** 供设置面板/诊断读取：当前 agent 上报的内置命令 */
+  getBuiltinCommands(): AvailableCommand[] {
+    return this.agentCommands
   }
 
   private async handleIncomingRequest(req: {
@@ -230,6 +298,31 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       return
     }
 
+    // grok 的 ask_user_question 工具：经 ACP 扩展方法向客户端请求用户回答。
+    // 响应格式经探针（scripts/ask-probe.mjs）实测确定：
+    //   接受回答 -> { outcome: 'accepted', answers: { '<问题文本>': '<所选 label 或自定义回答>' } }
+    //   取消     -> { outcome: 'cancelled' }
+    if (method === '_x.ai/ask_user_question') {
+      const questions = (params?.questions ?? []) as UserQuestion[]
+      const requestId = this.questionSeq++
+
+      const answers = await new Promise<UserQuestionAnswers | null>((resolve) => {
+        this.pendingQuestions.set(requestId, resolve)
+        this.emit('question', {
+          requestId,
+          sessionId: params?.sessionId ?? '',
+          questions
+        })
+      })
+
+      if (answers && Object.keys(answers).length > 0) {
+        respond({ outcome: 'accepted', answers })
+      } else {
+        respond({ outcome: 'cancelled' })
+      }
+      return
+    }
+
     if (method === 'fs/read_text_file' || method === 'fs/write_text_file' || method.startsWith('terminal/')) {
       // 未声明这些能力，agent 不应调用；防御性拒绝
       fail(-32601, `客户端不支持 ${method}`)
@@ -247,6 +340,14 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     resolver(optionId)
   }
 
+  /** 用户在界面上回答提问（answers 为空/null 表示取消） */
+  respondQuestion(requestId: number, answers: UserQuestionAnswers | null): void {
+    const resolver = this.pendingQuestions.get(requestId)
+    if (!resolver) return
+    this.pendingQuestions.delete(requestId)
+    resolver(answers)
+  }
+
   private requireClient(): AcpClient {
     if (!this.client?.running) throw new Error('agent 进程未运行')
     return this.client
@@ -256,8 +357,11 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     await this.start()
     const client = this.requireClient()
 
+    const mode = options.permissionMode ?? this.permissionModeDefault
     const meta: Record<string, unknown> = {}
-    if (options.autoApprove ?? this.autoApproveDefault) meta.yoloMode = true
+    // bypassPermissions 可在创建时经 _meta.yoloMode 直接带上；
+    // 其余模式 session/new 不识别，创建后再用 session/set_mode 切换（见下方）
+    if (mode === 'bypassPermissions') meta.yoloMode = true
     if (options.rules) meta.rules = options.rules
 
     const result = await client.request<SessionNewResult>('session/new', {
@@ -281,6 +385,15 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         this.log(`[config] 设置推理强度失败：${(err as Error).message}`)
       }
     }
+    // 非 bypass 模式（default/auto/acceptEdits/dontAsk/plan）创建时不带 yoloMode，
+    // 这里立即切到目标模式。bypassPermissions 已由 yoloMode 带上，无需重复切换。
+    if (mode !== 'bypassPermissions') {
+      try {
+        await this.setPermissionMode(result.sessionId, mode)
+      } catch (err) {
+        this.log(`[config] 设置权限模式失败：${(err as Error).message}`)
+      }
+    }
 
     return result
   }
@@ -288,13 +401,84 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   async loadSession(sessionId: string, cwd: string): Promise<SessionNewResult> {
     await this.start()
     const client = this.requireClient()
-    const result = await client.request<SessionNewResult>('session/load', {
-      sessionId,
-      cwd,
-      mcpServers: []
-    })
+    // 已在当前 agent 进程里加载过的会话，**不能再发 session/load**：
+    // grok 对同一 session 重复 load 会把整段历史再重放一遍（实测连发 3 次，
+    // 每次都重放 168 条），而重放是以「追加」语义进入渲染层的，
+    // 会把用户最先那条消息挤到列表末尾。这里直接短路，语义与 ensureSession 一致。
+    if (this.knownSessions.has(sessionId)) {
+      this.log(`[load] ${sessionId} 已在当前 agent 进程内，跳过重复 session/load`)
+      return {} as SessionNewResult
+    }
+    // 开始缓存该会话的重放通知
+    this.replayBuffers.set(sessionId, [])
+    const startedAt = Date.now()
+    let result: SessionNewResult = {} as SessionNewResult
+    try {
+      result = await client.request<SessionNewResult>('session/load', {
+        sessionId,
+        cwd,
+        mcpServers: []
+      })
     this.knownSessions.add(sessionId)
+    } finally {
+      // session/load 返回 ≈ 重放结束；再留一段静默期兜底捕获零星尾随通知。
+      // 上限 2s：用户紧接着发消息时，首批生成内容也不至于被缓存憋太久。
+      const grace = Math.min(2000, Math.max(800, Date.now() - startedAt))
+      // ⚠️ 必须**等重放真正下发完**才返回，不能只排个定时器就 resolve：
+      // 渲染层把 loadSession 的返回当作「历史已到齐」的信号（据此清 reloadingSessions、
+      // 显示就绪态）。若提前返回，几百条 update 还在路上，界面就会宣告「加载完成」
+      // 却只显示零星几条 —— 用户反馈的「只加载了部分」正是这个时序错位。
+      // finally 里的 await 会在 return 之前完成，所以这里的赋值对返回值有效。
+      // flushReplay 直接**返回条数**，不用实例字段存 —— 后者在两个会话并发加载时会串味。
+      result.replayed = await this.flushReplay(sessionId, grace)
+    }
     return result
+  }
+
+  /**
+   * 静默期到达后把缓存的重放通知一次性下发给渲染层。
+   * 返回的 Promise 在下发完成后 resolve，值是本次实际下发的条数。
+   */
+  private flushReplay(sessionId: string, delayMs: number): Promise<number> {
+    const existing = this.replayFlushTimers.get(sessionId)
+    if (existing) clearTimeout(existing)
+
+    return new Promise<number>((resolve) => {
+      let settled = false
+      const done = (): void => {
+        if (settled) return
+        settled = true
+        this.replayFlushTimers.delete(sessionId)
+   this.replayFlushWaiters.delete(sessionId)
+        const buffer = this.replayBuffers.get(sessionId)
+        this.replayBuffers.delete(sessionId)
+     const count = buffer?.length ?? 0
+        if (count > 0) this.log(`[replay] ${sessionId} 重放 ${count} 条，一次性下发`)
+        // ⚠️ 必须**先报总数再下发内容**（顺序不能反）：
+     // 渲染层靠「已应用数 == 总数」判断重放是否结束、并用 N/M 显示进度。
+        // 若内容先到（几百条连续 emit）而总数后到（loadSession 响应），
+        // 渲染层在收到总数之前无法判断「是否已到齐」，
+     // 只能干等兜底超时 —— 小会话就会明显卡一下（实测 2 条 update 延迟 451ms 才出内容）。
+        // count===0（空会话/新会话）也要发：否则渲染层只能干等 REPLAY_IDLE_MS
+      // 的静默兜底才收尾，白转 1.2s。收到 total=0 即代表「无需重放，立刻结束」。
+        this.emit('stream', { sessionId, update: { sessionUpdate: 'replay_begin', total: count } })
+      if (buffer) {
+          for (const update of buffer) {
+   this.emit('stream', { sessionId, update })
+    }
+        }
+        resolve(count)
+      }
+      // stop() 会遍历结算 waiter，否则 loadSession 的 await 永久挂起
+      this.replayFlushWaiters.set(sessionId, done)
+      this.replayFlushTimers.set(
+        sessionId,
+        setTimeout(() => {
+          this.replayFlushTimers.delete(sessionId)
+          done()
+        }, delayMs)
+      )
+    })
   }
 
   /**
@@ -336,6 +520,14 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   cancel(sessionId: string): void {
     if (!this.client?.running) return
     this.client.notify('session/cancel', { sessionId })
+    // 回合被中断时，正在等待的提问/权限请求必须就地结算：
+    // agent 侧会一直挂到收到响应为止（WorkHub 的注释也是这个意思：
+    // 「进程仍存活，需回响应才会继续」），不结算就会连同界面上的模态框一起卡死。
+    // 界面上的对话框由渲染层在 cancelCurrent() 里自行清理。
+    for (const [, resolve] of this.pendingQuestions) resolve(null)
+    this.pendingQuestions.clear()
+    for (const [, resolve] of this.pendingPermissions) resolve(null)
+    this.pendingPermissions.clear()
   }
 
   async setConfigOption(
@@ -351,10 +543,59 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     })
   }
 
+  /**
+   * 切换会话的权限模式（ACP session/set_mode，实测有效）。
+   *  - 'bypassPermissions' = 自动批准（always-approve / yolo）：工具调用不再逐个询问，
+   *    deny 规则和 hook 仍然生效
+   *  - 'default' = 询问模式：每个工具执行前弹请求
+   */
+  async setPermissionMode(sessionId: string, modeId: string): Promise<void> {
+    const client = this.requireClient()
+    await client.request('session/set_mode', { sessionId, modeId })
+  }
+
+  /**
+   * 关闭（卸载）会话：ACP `session/close`。
+   * 只释放 agent 进程内该会话的状态（历史、actor、缓存），**磁盘数据与会话列表都不动**，
+   * 下次打开该会话会走 ensureSession → session/load 重新加载。
+   * 长驻进程里开过的会话越多占用越大，这个入口让用户能主动回收。
+   */
+  async closeSession(sessionId: string): Promise<void> {
+    // 未加载的会话直接返回，不要为「本来就不在进程里」触发一次远端调用
+    if (!this.knownSessions.has(sessionId)) return
+    if (!this.client?.running) return
+
+    // 先摘掉本地缓存，否则 close 之后到达的尾随通知还会被当成实时流
+    this.knownSessions.delete(sessionId)
+    const timer = this.replayFlushTimers.get(sessionId)
+    if (timer) clearTimeout(timer)
+    this.replayFlushTimers.delete(sessionId)
+    this.replayBuffers.delete(sessionId)
+
+    try {
+      await this.requireClient().request('session/close', { sessionId }, 20_000)
+      this.log(`[close] 已卸载会话 ${sessionId}`)
+    } catch (err) {
+      // 关闭失败不影响正确性：下次 prompt 前 ensureSession 会重新 load
+      this.log(`[close] 卸载会话失败（忽略）：${(err as Error).message}`)
+    }
+  }
+
   async stop(): Promise<void> {
     // 拒绝所有挂起的权限请求，避免 agent 侧悬挂
     for (const [, resolve] of this.pendingPermissions) resolve(null)
     this.pendingPermissions.clear()
+    // 挂起的提问同样按取消处理
+    for (const [, resolve] of this.pendingQuestions) resolve(null)
+    this.pendingQuestions.clear()
+    // 清掉重放缓存与待刷新定时器
+    for (const [, timer] of this.replayFlushTimers) clearTimeout(timer)
+    this.replayFlushTimers.clear()
+    this.replayBuffers.clear()
+    // 必须结算正在等待的 flushReplay，否则 loadSession 里的 await this.flushReplay()
+    // 会永久挂起（停进程时正好在加载大会话就会触发）
+    for (const [, settle] of this.replayFlushWaiters) settle()
+    this.replayFlushWaiters.clear()
 
     const client = this.client
     this.client = null

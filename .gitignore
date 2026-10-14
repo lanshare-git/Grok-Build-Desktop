@@ -6,7 +6,7 @@ out/
 dist/
 dist-v*/
 release/
-app/
+/app/
 
 # Electron / Vite cache
 .vite/
@@ -21,3 +21,6 @@ Thumbs.db
 # Local tool & agent state
 .workbuddy/
 .workbuddy-ai/
+
+# TypeScript incremental build cache
+*.tsbuildinfo

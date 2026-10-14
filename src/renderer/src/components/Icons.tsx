@@ -49,7 +49,7 @@ export const IconPulse = ({ size = 16, className }: IconProps): JSX.Element => (
 
 export const IconSend = ({ size = 16, className }: IconProps): JSX.Element => (
   <svg {...base(size, className)}>
-    <path d="M4 12l16-8-6 8 6 8z" />
+    <path d="M12 4l8 16-8-6-8 6z" />
   </svg>
 )
 
@@ -125,6 +125,13 @@ export const IconSpark = ({ size = 16, className }: IconProps): JSX.Element => (
   </svg>
 )
 
+/** 纯聊天 / 临时会话（对话气泡图标） */
+export const IconChat = ({ size = 16, className }: IconProps): JSX.Element => (
+  <svg {...base(size, className)}>
+    <path d="M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H10l-4 3v-3H6a2 2 0 0 1-2-2z" />
+  </svg>
+)
+
 export const IconEdit = ({ size = 16, className }: IconProps): JSX.Element => (
   <svg {...base(size, className)}>
     <path d="M12 20h9" />
@@ -152,5 +159,79 @@ export const IconScissors = ({ size = 16, className }: IconProps): JSX.Element =
     <circle cx="6" cy="6" r="3" />
     <circle cx="6" cy="18" r="3" />
     <path d="M20 4L8.12 15.88M14.47 14.48L20 20M8.12 8.12L12 12" />
+  </svg>
+)
+
+/** MCP / 插件（插头图标） */
+export const IconPlug = ({ size = 16, className }: IconProps): JSX.Element => (
+  <svg {...base(size, className)}>
+    <path d="M9 2v6M15 2v6" />
+    <path d="M7 8h10v3a5 5 0 0 1-10 0z" />
+    <path d="M12 16v6" />
+  </svg>
+)
+
+/** 隐藏到系统托盘 */
+export const IconTray = ({ size = 16, className }: IconProps): JSX.Element => (
+  <svg {...base(size, className)}>
+    <rect x="4" y="13" width="16" height="6" rx="2" />
+    <path d="M12 11V7M9 9l3-3 3 3" />
+  </svg>
+)
+
+/** 电源 / 直接退出 */
+export const IconPower = ({ size = 16, className }: IconProps): JSX.Element => (
+  <svg {...base(size, className)}>
+    <path d="M12 4v8" />
+    <path d="M7.5 7.5a7 7 0 1 0 9 0" />
+  </svg>
+)
+
+/** 设置（齿轮） */
+export const IconGear = ({ size = 16, className }: IconProps): JSX.Element => (
+  <svg {...base(size, className)}>
+    <circle cx="12" cy="12" r="3.2" />
+    <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.08a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.08a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1.03z" />
+  </svg>
+)
+
+/** 账号（单人剪影） */
+export const IconUser = ({ size = 16, className }: IconProps): JSX.Element => (
+  <svg {...base(size, className)}>
+    <circle cx="12" cy="8" r="4" />
+    <path d="M4 21a8 8 0 0 1 16 0" />
+  </svg>
+)
+
+/** 版本信息 */
+export const IconInfo = ({ size = 16, className }: IconProps): JSX.Element => (
+  <svg {...base(size, className)}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 11v5M12 8h.01" />
+  </svg>
+)
+
+export const IconRefresh = ({ size = 16, className }: IconProps): JSX.Element => (
+  <svg {...base(size, className)}>
+    <path d="M20 11a8 8 0 1 0-1.2 5.2M20 5v6h-6" />
+  </svg>
+)
+
+export const IconDownload = ({ size = 16, className }: IconProps): JSX.Element => (
+  <svg {...base(size, className)}>
+    <path d="M12 4v10m0 0 4-4m-4 4-4-4M4 18h16" />
+  </svg>
+)
+
+export const IconBox = ({ size = 16, className }: IconProps): JSX.Element => (
+  <svg {...base(size, className)}>
+    <path d="M3 8.5 12 4l9 4.5v7L12 20l-9-4.5zM3 8.5 12 13m0 0 9-4.5M12 13v7" />
+  </svg>
+)
+
+export const IconGauge = ({ size = 16, className }: IconProps): JSX.Element => (
+  <svg {...base(size, className)}>
+    <path d="M4 18a8 8 0 1 1 16 0" />
+    <path d="M12 14l3.5-4" />
   </svg>
 )

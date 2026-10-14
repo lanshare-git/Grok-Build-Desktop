@@ -1,7 +1,13 @@
 import { useStore } from '../store'
-import { IconPlus, IconSpark } from './Icons'
+import { IconGrok, IconChat, IconPlus, IconSpark } from './Icons'
 
-export default function Welcome({ onCreate }: { onCreate: () => void }): JSX.Element {
+export default function Welcome({
+  onCreate,
+  onChat
+}: {
+  onCreate: () => void
+  onChat?: () => void
+}): JSX.Element {
   const connection = useStore((s) => s.connection)
   const diagnostics = useStore((s) => s.diagnostics)
   const toggleDiagnostics = useStore((s) => s.toggleDiagnostics)
@@ -11,7 +17,9 @@ export default function Welcome({ onCreate }: { onCreate: () => void }): JSX.Ele
   return (
     <div className="welcome">
       <div className="welcome-card">
-        <div className="welcome-mark">G</div>
+        <div className="welcome-mark">
+          <IconGrok size={30} />
+        </div>
         <h1>Grok Build 桌面端</h1>
         <p className="welcome-lead">
           直接复用你终端版 Grok Build 的登录态、模型与工具链，通过 ACP 协议驱动同一个 Agent。
@@ -52,12 +60,22 @@ export default function Welcome({ onCreate }: { onCreate: () => void }): JSX.Ele
           </div>
         )}
 
-        <button className="btn btn-primary btn-lg" onClick={onCreate}>
-          <IconPlus />
-          新建会话
-        </button>
+        <div className="welcome-actions">
+          <button className="btn btn-primary btn-lg" onClick={onCreate}>
+            <IconPlus />
+            新建任务
+          </button>
+          {onChat && (
+            <button className="btn btn-ghost btn-lg" onClick={onChat} title="以主目录为根、不绑定任何项目，且锁定为只读（不写文件）开始一段随聊随用的会话">
+              <IconChat />
+              新建聊天
+            </button>
+          )}
+        </div>
         <p className="welcome-foot muted">
-          首次使用会要求选择一个工作目录 —— Agent 将以该目录为根开展工作。
+          不想绑定项目？点「新建聊天」即可直接开聊，会话以你的主目录为根、且锁定为只读（不写文件）。
+          其余会话则以「工作目录」为根开展工作，目录在创建时确定、之后不可更改；
+          顶栏的路径按钮可切换目录，会在该目录下开启一个新会话。
         </p>
       </div>
     </div>

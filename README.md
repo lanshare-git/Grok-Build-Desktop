@@ -40,7 +40,7 @@ Grok Build 的桌面 Agent 客户端。**不重新实现模型调用**，而是�
 | 产物 | 路径 | 说明 |
 | --- | --- | --- |
 | 免安装版 | `dist/win-unpacked/Grok Build Desktop.exe` | 双击即用，免安装。整个 `win-unpacked` 目录需保持完整，可整体拷贝到别处 |
-| 安装包 | `dist/Grok Build Desktop Setup 0.1.0.exe` | 双击安装，可自选安装目录，生成开始菜单快捷方式 |
+| 安装包 | `dist/Grok Build Desktop Setup <版本号>.exe` | 双击安装，可自选安装目录，生成开始菜单快捷方式 |
 
 > 首次运行若被 Windows SmartScreen 拦下（应用未做代码签名），点「更多信息」→「仍要运行」。
 
@@ -65,6 +65,28 @@ npm run dev
 | `npm run typecheck` | 主进程 + 渲染进程类型检查 |
 | `npm run pack` | 打包免安装版到 `dist/win-unpacked/` |
 | `npm run dist` | 打包成 Windows 安装包（输出到 `dist/`） |
+| `npm run sync-app` | 把打包产物同步到免安装绿版 `app/`（自动检测运行态、成对校验） |
+| `npm run deploy` | 等价于 `pack` + `sync-app`，一步出绿版 |
+
+## 版本管理
+
+版本号语义为 **主版本.次版本.修订号**：修 bug 升修订号，新增功能升次版本号，不兼容改动升主版本号。
+
+**每次改动功能都会自动升一次版本号**，由脚本统一维护，不手工改 `package.json`：
+
+```bash
+npm run version:show                          # 查看当前版本与最近变更
+npm run version:patch -- "修复了xxx"          # 0.2.0 → 0.2.1
+npm run version:minor -- "新增了xxx"          # 0.2.0 → 0.3.0
+npm run version:major -- "重构了xxx"          # 0.2.0 → 1.0.0
+```
+
+脚本（`scripts/version.mjs`）会同步更新 `package.json`、`package-lock.json`，
+并在 `CHANGELOG.md` 顶部插入一条变更记录。加 `--commit` / `--tag` 可顺带提交并打标签。
+
+应用内查看版本：点击左下角状态栏最下方的版本号，打开「关于」面板，其中包含
+版本号、**构建时刻**、Grok Build 版本与运行环境。构建时刻能区分「同一版本号的两次不同构建」，
+反馈问题时请一并附上。
 
 ## 环境变量
 
@@ -114,6 +136,10 @@ grok 的模型服务在境外（`cli-chat-proxy.grok.com`）。**grok 只读 `HT
 > "Grok Build Desktop.exe"
 > ```
 
+## 开发者文档
+
+面向 AI 编码助手的项目架构、约定与已知坑，见根目录 [`AGENTS.md`](AGENTS.md)（Agent 工具会自动读取）。
+
 ## 功能
 
 - 流式输出、思考过程折叠展示
@@ -124,6 +150,7 @@ grok 的模型服务在境外（`cli-chat-proxy.grok.com`）。**grok 只读 `HT
 - 自动批准开关：关闭后每次工具执行都会弹出确认
 - 工作目录选择（Agent 以该目录为根开展工作）
 - 用量统计（token / 成本）
+- 系统托盘：三态图标（绿=已连接 / 黄=连接中或断开 / 红=错误），关闭窗口最小化到托盘，托盘菜单可显示窗口或退出
 
 ## 安全说明
 

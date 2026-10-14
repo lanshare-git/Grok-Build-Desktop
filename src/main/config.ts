@@ -6,6 +6,7 @@
 import { app } from 'electron'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import type { CloseAction } from '../shared/types'
 
 export interface AppConfig {
   /**
@@ -18,11 +19,19 @@ export interface AppConfig {
   proxy: string | null
   /** 该代理是否由自动探测写入（用于界面文案区分） */
   proxyAutoDetected: boolean
+  /**
+   * 点击窗口关闭按钮时的行为：
+   *  - 'tray'：隐藏到托盘（不退出，托盘可重新打开）
+   *  - 'quit'：直接退出应用
+   *  - null：未配置，首次点关闭时弹窗询问并记住选择
+   */
+  closeAction: CloseAction | null
 }
 
 const DEFAULTS: AppConfig = {
   proxy: null,
-  proxyAutoDetected: false
+  proxyAutoDetected: false,
+  closeAction: null
 }
 
 function configFile(): string {

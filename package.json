@@ -1,6 +1,6 @@
 {
   "name": "grok-build-desktop",
-  "version": "0.1.0",
+  "version": "0.21.0",
   "description": "Grok Build 桌面 Agent 客户端 — 基于 ACP 协议复用终端版 Grok Build 的登录态、模型与工具",
   "main": "./out/main/index.js",
   "author": "FJH",
@@ -14,7 +14,15 @@
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "pack": "npm run build && electron-builder --dir",
-    "dist": "npm run build && electron-builder"
+    "dist": "npm run build && electron-builder",
+    "sync-app": "node scripts/sync-app.mjs",
+    "deploy": "npm run pack && npm run sync-app",
+    "gen:icons": "node scripts/gen-icons.mjs",
+    "version:show": "node scripts/version.mjs",
+    "version:patch": "node scripts/version.mjs patch",
+    "version:minor": "node scripts/version.mjs minor",
+    "version:major": "node scripts/version.mjs major",
+    "version:set": "node scripts/version.mjs set"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -63,7 +71,7 @@
       "allowToChangeInstallationDirectory": true
     },
     "extraResources": [
-      "build/icon.ico"
+      "build"
     ]
   }
 }

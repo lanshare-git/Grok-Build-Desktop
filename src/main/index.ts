@@ -1,8 +1,16 @@
 import { join } from 'node:path'
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, protocol, shell } from 'electron'
 
 import { AgentService } from './acp/service'
 import { registerIpc } from './ipc'
+import { registerAssetProtocol } from './assets'
+import { createTray, interceptClose, markQuitting } from './tray'
+
+// 私有媒体协议：必须在 app ready 之前声明为「标准 + 安全」方案，
+// 这样渲染进程才能像加载 https 资源一样直接用作 <video>/<img> 的 src。
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'grok-asset', privileges: { standard: true, secure: true, supportFetchAPI: true, bypassCSP: true } }
+])
 
 /** 应用图标：打包后位于 resources/build/，开发态位于项目 build/ 目录 */
 function iconPath(): string {
@@ -11,7 +19,7 @@ function iconPath(): string {
     : join(__dirname, '../../build/icon.ico')
 }
 
-const service = new AgentService({ autoApprove: true })
+const service = new AgentService({ permissionMode: 'bypassPermissions' })
 let mainWindow: BrowserWindow | null = null
 
 function createWindow(): void {
@@ -34,6 +42,9 @@ function createWindow(): void {
   })
 
   mainWindow.on('ready-to-show', () => mainWindow?.show())
+
+  // 关闭窗口 = 最小化到托盘（真正退出走托盘菜单「退出」或 app.quit()）
+  mainWindow.on('close', (e) => interceptClose(e))
 
   // 渲染层诊断：崩溃 / 加载失败 / 控制台输出，全部落到主进程 stderr，便于排查
   mainWindow.webContents.on('render-process-gone', (_e, details) => {
@@ -62,8 +73,10 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  registerAssetProtocol()
   registerIpc(service)
   createWindow()
+  createTray(mainWindow!, service)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -75,6 +88,8 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+  // 放行窗口 close 拦截：这是真正的退出
+  markQuitting()
   // 确保子进程随应用一起退出
   void service.stop()
 })

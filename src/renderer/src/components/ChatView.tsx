@@ -1,12 +1,16 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 
 import { editAndResend } from '../actions'
 import { useStore } from '../store'
-import type { ImageAttachment } from '@shared/types'
+import type { ChatItem, ImageAttachment, MediaAttachment } from '@shared/types'
+
+type ToolItem = Extract<ChatItem, { kind: 'tool' }>
 import Markdown from './Markdown'
 import PlanPanel from './PlanPanel'
 import ThinkingBlock from './ThinkingBlock'
 import ToolCallCard from './ToolCallCard'
+import ToolGroupCard from './ToolGroupCard'
+import { densityGroupsTools } from '@shared/types'
 import { IconCopy, IconEdit } from './Icons'
 
 /** 09:20 样式的短时间戳 */
@@ -15,6 +19,90 @@ const formatTime = (at: number): string =>
 
 function copyText(text: string): void {
   void navigator.clipboard?.writeText(text)
+}
+
+/* ------------------------------------------------------------------ *
+ *  媒体渲染：把 grok 下发的视频/图片（resource_link / image 内容块，
+ *  或对结构化媒体缺失时、从助手文本里抽取的裸媒体链接）渲染出来。
+ * ------------------------------------------------------------------ */
+
+const MEDIA_EXT = /\.(mp4|webm|mov|m4v|ogv|png|jpe?g|gif|webp|avif|bmp|svg)(\?\S*)?$/i
+
+function mediaKindFromUri(uri: string): 'video' | 'image' | null {
+  const u = uri.toLowerCase().split('#')[0]
+  if (!MEDIA_EXT.test(u)) return null
+  return /\.(mp4|webm|mov|m4v|ogv)(\?\S*)?$/i.test(u) ? 'video' : 'image'
+}
+
+/**
+ * 兜底：当助手消息没有结构化 media 时，从文本里抽取裸媒体链接
+ * （http(s) URL 或本地绝对路径）。跳过已写在 markdown 链接 `](...)` 里的，
+ * 避免与 Markdown 组件重复渲染。
+ */
+function extractEmbeddedMedia(text: string): MediaAttachment[] {
+  if (!text) return []
+  const out: MediaAttachment[] = []
+  const patterns = [
+    /https?:\/\/[^\s)\]]+\.(?:mp4|webm|mov|m4v|ogv|png|jpe?g|gif|webp|avif|bmp|svg)(?:\?\S*)?/gi,
+    /(?:[a-zA-Z]:\\[^\s)\]]+|\\[\\[\w.-]+\\[^\s)\]]+)\.(?:mp4|webm|mov|m4v|ogv|png|jpe?g|gif|webp|avif|bmp|svg)/gi
+  ]
+  for (const re of patterns) {
+    let m: RegExpExecArray | null
+    while ((m = re.exec(text))) {
+      const uri = m[0]
+      const before = text.slice(Math.max(0, m.index - 3), m.index)
+      if (before.endsWith('](') || before.endsWith('!](')) continue // 已在 markdown 链接内
+      const kind = mediaKindFromUri(uri)
+      if (kind && !out.some((x) => x.uri === uri)) out.push({ kind, uri })
+    }
+  }
+  return out
+}
+
+function MediaView({ media }: { media: MediaAttachment[] }): JSX.Element {
+  const [srcs, setSrcs] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    let cancelled = false
+    void Promise.all(
+      media.map(async (m) => {
+        try {
+          const resolved = await window.grok.resolveAsset(m.uri)
+          return [m.uri, resolved] as const
+        } catch {
+          return [m.uri, ''] as const
+        }
+      })
+    ).then((entries) => {
+      if (cancelled) return
+      const map: Record<string, string> = {}
+      for (const [k, v] of entries) if (v) map[k] = v
+      setSrcs(map)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [media])
+
+  return (
+    <div className="msg-media-wrap">
+      {media.map((m) => {
+        const src = srcs[m.uri]
+        if (!src) {
+          return (
+            <div key={m.uri} className="msg-media-loading muted">
+              正在准备媒体…
+            </div>
+          )
+        }
+        return m.kind === 'video' ? (
+          <video key={m.uri} className="msg-media" src={src} controls preload="metadata" />
+        ) : (
+          <img key={m.uri} className="msg-media" src={src} alt={m.name ?? '图片'} />
+        )
+      })}
+    </div>
+  )
 }
 
 /* ------------------------------------------------------------------ *
@@ -112,13 +200,52 @@ function UserEditBox(props: {
 export default function ChatView(): JSX.Element {
   const session = useStore((s) => s.sessions.find((x) => x.id === s.activeId))
   const running = useStore((s) => s.running.includes(s.activeId ?? ''))
+  // 正在 session/load 重放历史：此时 items 被清空，若不管就会显示 welcome 文案，
+  // 等于谎称「会话已就绪」。超大会话重放要好几秒，这个假文案会一直挂着。
+  const reloading = useStore((s) => s.reloadingSessions.includes(s.activeId ?? ''))
+  /**
+   * 重放进度比例（0~1），用于画顶部那条 2px 细线；null = 总数未知 → 画往复动画。
+   * ⚠️ 必须返回**数字或 null**（原始值），不能返回对象：
+   * zustand 用 Object.is 比较 selector 返回值，每次渲染现造对象会导致无限重渲染。
+   */
+  const progressRatio = useStore((s) => {
+    const id = s.activeId
+    const p = id ? s.replayProgress[id] : undefined
+    if (!p || p.total <= 0) return null
+    return Math.max(0.04, Math.min(1, p.applied / p.total))
+  })
   const scrollerRef = useRef<HTMLDivElement>(null)
   const pinnedRef = useRef(true)
 
   // 当前正在编辑的用户消息 id；同一时间只允许编辑一条
   const [editingId, setEditingId] = useState<string | null>(null)
 
-  const items = session?.items ?? []
+  const rawItems = session?.items ?? []
+  // 「紧凑 + 分组 / 最紧凑」档：把**连续的同种**工具调用折成一张汇总卡（grok 1.0.52 同义行为）。
+  // 必须在渲染前做，且用 useMemo 缓存 —— 否则每次 keystroke 都会重扫几百条 items。
+  const groupTools = useStore((s) => densityGroupsTools(s.toolCallDensity))
+  const items = useMemo(() => {
+    if (!groupTools) return rawItems
+    const out: Array<ChatItem | { kind: 'tool-group'; id: string; items: ToolItem[] }> = []
+    for (const item of rawItems) {
+      const last = out[out.length - 1]
+      const canJoin =
+        item.kind === 'tool' &&
+        last?.kind === 'tool-group' &&
+        (last.items[0].toolName || last.items[0].title) === (item.toolName || item.title)
+      if (canJoin) {
+        // 连续同工具才合并；夹了别的类型就自然断开（上面 canJoin 已保证）
+        ;(last as { items: ToolItem[] }).items.push(item)
+        continue
+      }
+      if (item.kind === 'tool') {
+        out.push({ kind: 'tool-group', id: `tg-${item.id}`, items: [item] })
+        continue
+      }
+      out.push(item)
+    }
+    return out
+  }, [rawItems, groupTools])
 
   // 切换会话时退出编辑态
   useEffect(() => {
@@ -146,7 +273,25 @@ export default function ChatView(): JSX.Element {
   return (
     <div className="chat" ref={scrollerRef} onScroll={handleScroll}>
       <div className="chat-inner">
-        {items.length === 0 && (
+        {/*
+          重放指示：**只有一条 2px 细进度线**，不要文字、不用 spinner、不加边框。
+          之前是「带边框的卡片 + spinner + 「已加载 N/M 条」文案」+ 输入框上方再来一条
+ 「正在加载历史对话，可先输入…」—— 三处提示同时出现，太吵。
+        实测小会话首批只需 7ms、大会话约 700ms，用户其实只需要知道「还在加载」，
+        细线足够；文案属于噪音（且 N/M 数字反而让人盯着进度条算时间）。
+        只在重放期间存在，不占布局高度以外的空间。
+        */}
+        {reloading && (
+          <div className="replay-line">
+            {progressRatio !== null ? (
+              <div className="replay-line-fill" style={{ width: `${progressRatio * 100}%` }} />
+            ) : (
+              <div className="replay-line-fill is-indeterminate" />
+            )}
+          </div>
+        )}
+
+        {items.length === 0 && !reloading && (
           <div className="chat-hint">
             <p>会话已就绪，开始描述你想做的事。</p>
             <p className="muted">Agent 可以读写文件、执行命令、检索代码——与终端版 Grok Build 能力一致。</p>
@@ -206,17 +351,27 @@ export default function ChatView(): JSX.Element {
                   </div>
                 </div>
               )
-            case 'assistant':
+            case 'assistant': {
+              const media = item.media && item.media.length > 0 ? item.media : extractEmbeddedMedia(item.text)
               return (
                 <div key={item.id} className="msg msg-assistant">
                   <Markdown text={item.text} />
+                  {media.length > 0 && <MediaView media={media} />}
                   {item.streaming && <span className="caret" />}
                 </div>
               )
+            }
             case 'thinking':
               return <ThinkingBlock key={item.id} item={item} />
             case 'tool':
               return <ToolCallCard key={item.id} item={item} />
+            case 'tool-group':
+              // 只有一张时退回普通卡片，避免为单次调用平白多一层壳
+              return item.items.length > 1 ? (
+                <ToolGroupCard key={item.id} items={item.items} />
+              ) : (
+                <ToolCallCard key={item.items[0].id} item={item.items[0]} />
+              )
             case 'plan':
               return <PlanPanel key={item.id} item={item} />
             case 'notice':

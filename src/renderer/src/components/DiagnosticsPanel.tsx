@@ -2,14 +2,16 @@ import { useEffect, useRef, useState } from 'react'
 
 import { applyProxy, autoDetectProxy, connectAgent, refreshDiagnostics } from '../actions'
 import { useStore } from '../store'
-import { IconClose } from './Icons'
 
 const LEVEL_LABEL = { ok: '正常', warn: '注意', error: '异常' } as const
 
+/**
+ * 环境自检 —— 设置中心「环境自检」分区的内容。
+ * 只渲染内容本身（标题/外壳由 SettingsDialog 提供），不再自带 drawer。
+ */
 export default function DiagnosticsPanel(): JSX.Element {
   const diagnostics = useStore((s) => s.diagnostics)
   const logs = useStore((s) => s.logs)
-  const toggleDiagnostics = useStore((s) => s.toggleDiagnostics)
   const clearLogs = useStore((s) => s.clearLogs)
   const [tab, setTab] = useState<'checks' | 'logs'>('checks')
   const [proxyInput, setProxyInput] = useState('')
@@ -35,28 +37,20 @@ export default function DiagnosticsPanel(): JSX.Element {
   }
 
   return (
-    <div className="drawer-backdrop" onClick={() => toggleDiagnostics(false)}>
-      <div className="drawer" onClick={(e) => e.stopPropagation()}>
-        <div className="drawer-head">
-          <div>
-            <div className="drawer-title">环境自检</div>
-            <div className="drawer-sub">检查运行依赖、登录态与网络连通性</div>
-          </div>
-          <button className="icon-btn" onClick={() => toggleDiagnostics(false)}>
-            <IconClose size={16} />
-          </button>
-        </div>
+    <div className="settings-page">
+      <div className="settings-page-title">环境自检</div>
+      <div className="settings-page-sub">检查运行依赖、登录态与网络连通性</div>
 
-        <div className="drawer-tabs">
-          <button className={tab === 'checks' ? 'is-active' : ''} onClick={() => setTab('checks')}>
-            检查项
-          </button>
-          <button className={tab === 'logs' ? 'is-active' : ''} onClick={() => setTab('logs')}>
-            运行日志{logs.length > 0 && ` (${logs.length})`}
-          </button>
-        </div>
+      <div className="drawer-tabs drawer-tabs-embedded">
+        <button className={tab === 'checks' ? 'is-active' : ''} onClick={() => setTab('checks')}>
+          检查项
+        </button>
+        <button className={tab === 'logs' ? 'is-active' : ''} onClick={() => setTab('logs')}>
+          运行日志{logs.length > 0 && ` (${logs.length})`}
+        </button>
+      </div>
 
-        <div className="drawer-body">
+      <div className="drawer-body drawer-body-embedded">
           {tab === 'checks' && (
             <>
               <div className="drawer-actions">
@@ -164,7 +158,6 @@ export default function DiagnosticsPanel(): JSX.Element {
               </div>
             </>
           )}
-        </div>
       </div>
     </div>
   )
