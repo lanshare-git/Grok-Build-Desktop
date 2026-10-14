@@ -7,6 +7,9 @@
  *  2. dist/win-unpacked/Grok Build Desktop.exe  主程序（内嵌 asar 完整性哈希，必须与 asar 成对）
  *  3. dist/win-unpacked/resources/build/*  图标与托盘图（asar 之外的资源，由 gen:icons 生成，
  *     内容会变；漏同步会导致窗口图标陈旧、托盘图标缺失）
+ *  4. 其余 Electron 运行时文件（ffmpeg.dll / *.dll / *.pak / locales/ 等）——缺失或大小
+ *     不一致时补齐。历史上 app/ 由全量拷贝建立、后续只增量更新 exe+asar；全新机器上
+ *     app/ 缺运行时文件会报「找不到 ffmpeg.dll」。
  *
  * 等价于之前手敲的几行 cp，但多了：运行态检测、目录创建、成对大小校验。
  * 用法：node scripts/sync-app.mjs   （或 npm run sync-app / npm run deploy）
@@ -82,7 +85,39 @@ if (existsSync(SRC_BUILD)) {
   console.log('· 跳过图标资源同步（dist 中没有 ' + SRC_BUILD + '）')
 }
 
-// 6. 完整性校验：目标与源大小一致
+// 6. 补齐 Electron 运行时文件（除 exe 与 resources 外的顶层文件/目录）。
+//    幂等：已存在且大小一致的跳过，缺的补、变了的重拷（Electron 升级后同样生效）。
+const UNPACKED = resolve(root, 'dist/win-unpacked')
+if (existsSync(UNPACKED)) {
+  const EXE_NAME = 'Grok Build Desktop.exe'
+  const copyRuntime = (src, dst, rel) => {
+    for (const name of readdirSync(src)) {
+      const s = join(src, name)
+      const d = join(dst, name)
+      if (statSync(s).isDirectory()) {
+        mkdirSync(d, { recursive: true })
+        copyRuntime(s, d, rel + name + '/')
+      } else if (!existsSync(d) || statSync(s).size !== statSync(d).size) {
+        copyFileSync(s, d)
+        console.log('✔ runtime ' + rel + name)
+      }
+    }
+  }
+  for (const name of readdirSync(UNPACKED)) {
+    if (name === EXE_NAME || name === 'resources') continue
+    const s = join(UNPACKED, name)
+    const d = join(root, 'app', name)
+    if (statSync(s).isDirectory()) {
+      mkdirSync(d, { recursive: true })
+      copyRuntime(s, d, name + '/')
+    } else if (!existsSync(d) || statSync(s).size !== statSync(d).size) {
+      copyFileSync(s, d)
+      console.log('✔ runtime ' + name)
+    }
+  }
+}
+
+// 7. 完整性校验：目标与源大小一致
 const sExe = statSync(SRC_EXE).size
 const dExe = statSync(DST_EXE).size
 const sAsar = statSync(SRC_ASAR).size

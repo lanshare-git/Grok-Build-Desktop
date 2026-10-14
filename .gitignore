@@ -24,3 +24,6 @@ Thumbs.db
 
 # TypeScript incremental build cache
 *.tsbuildinfo
+
+# Local 7za wrapper (tolerates symlink errors on Windows without Developer Mode)
+7za.cmd
