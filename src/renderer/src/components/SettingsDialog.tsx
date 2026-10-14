@@ -192,12 +192,12 @@ function GeneralSettings(): JSX.Element {
         </div>
       </div>
 
-      {/* 删除会话：确认弹窗里「同时删除磁盘文件」的默认勾选状态 */}
+      {/* 删除会话：删除确认弹窗里「同时删除磁盘上的会话文件」的默认勾选状态 */}
       <div className="settings-group">
         <div className="settings-row">
           <div className="settings-row-label">
             <span className="settings-row-title">删除会话时</span>
-            <span className="settings-row-desc">确认弹窗里「同时删除磁盘文件」的默认状态</span>
+            <span className="settings-row-desc">是否默认连磁盘文件一起删</span>
           </div>
           <div className="close-action-setting is-seg">
             <button
@@ -215,8 +215,7 @@ function GeneralSettings(): JSX.Element {
           </div>
         </div>
         <div className="mcp-hint">
-          勾选「同时删除磁盘文件」会一并删掉该会话的磁盘数据（先送系统回收站，不可用时移入应用内
-          回收站，仍可找回）。改成「默认不勾」后，弹窗默认只把会话从列表移除，要连磁盘一起删需自己勾。
+          对应删除确认弹窗里的「同时删除磁盘上的会话文件」复选框：勾选会一并删掉该会话的磁盘数据（先送系统回收站，不可用时移入应用内回收站，仍可找回）；默认不勾时，弹窗只把会话从列表移除，要连磁盘一起删需在弹窗里自己勾上。
         </div>
       </div>
 

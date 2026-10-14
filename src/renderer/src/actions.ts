@@ -207,13 +207,6 @@ export async function chooseWorkspace(): Promise<void> {
   if (active) useStore.getState().appendNotice(active.id, `已切换到工作目录 ${dir}。`, 'info')
 }
 
-/** 登记一个工作目录（侧栏「添加工作目录」），不动 agent、不开会话 */
-export async function addWorkspaceDir(): Promise<void> {
-  const dir = await window.grok.pickDirectory()
-  if (!dir) return
-  useStore.getState().addWorkspace(dir)
-}
-
 /**
  * 新建会话：先只建一个「本地草稿」（不调 grok 的 session/new，磁盘不落文件），
  * 用户首次发送时再由 sendPrompt 真正 newSession 并 materialize。

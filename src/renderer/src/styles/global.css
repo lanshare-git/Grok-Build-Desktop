@@ -294,23 +294,6 @@ pre {
   padding: 5px 8px 5px 6px;
 }
 
-.ws-add {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  padding: 7px;
-  border-radius: var(--radius-sm);
-  border: 1px dashed var(--border-strong);
-  font-size: 12px;
-  color: var(--text-secondary);
-  transition: background 0.12s ease, color 0.12s ease;
-}
-.ws-add:hover {
-  background: #e9ebef;
-  color: var(--text);
-}
-
 .ws-hint {
   font-size: 11.5px;
   line-height: 1.5;
@@ -1001,6 +984,13 @@ pre {
 .chip-usage {
   font-family: var(--font-mono);
   font-size: 11px;
+}
+
+/* 用量入口的纯图标态（尚无用量数据时）：与旁侧 chip 同高，正圆居中 */
+.chip-usage-icon {
+  width: 28px;
+  padding: 0;
+  justify-content: center;
 }
 
 /* ---------- 聊天区 ---------- */

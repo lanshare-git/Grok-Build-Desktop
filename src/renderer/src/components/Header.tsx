@@ -6,7 +6,7 @@ import { formatNumber, isLockedChat, sessionDisplayTitle } from '../utils'
 import type { PermissionMode } from '@shared/types'
 import { PERMISSION_MODE_OPTIONS } from '@shared/types'
 import DirPickerMenu from './DirPickerMenu'
-import { IconFolder, IconPlus } from './Icons'
+import { IconFolder, IconGauge, IconPlus } from './Icons'
 
 export default function Header(): JSX.Element {
   const session = useStore((s) => s.sessions.find((x) => x.id === s.activeId))
@@ -167,15 +167,15 @@ export default function Header(): JSX.Element {
           ))}
         </select>
 
-        {/* chip 显示的是**上一轮**的实时用量（来自 ACP usage 通知）；点击查看本会话逐轮明细 + 全局累计 */}
+        {/* chip 显示的是**上一轮**的实时用量（来自 ACP usage 通知）；点击查看本会话逐轮明细 + 全局累计。无数据时为纯图标按钮 */}
         <button
-          className="chip chip-usage chip-button"
+          className={`chip chip-usage chip-button${usage ? '' : ' chip-usage-icon'}`}
           title={
             usage
               ? `上一轮：输入 ${usage.inputTokens ?? 0} · 输出 ${usage.outputTokens ?? 0} · 缓存读 ${
                   usage.cacheReadInputTokens ?? 0
                 }\n点击查看本会话逐轮明细与全部会话累计`
-              : '点击查看本会话用量明细与全部会话累计'
+              : '用量：点击查看本会话逐轮明细与全部会话累计'
           }
           onClick={() => openUsage(session.id)}
         >
@@ -185,7 +185,7 @@ export default function Header(): JSX.Element {
               {usage.costUsd !== undefined && ` · $${usage.costUsd.toFixed(4)}`}
             </>
           ) : (
-            '用量'
+            <IconGauge size={14} />
           )}
         </button>
       </div>

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import {
-  addWorkspaceDir,
   cleanError,
   getDeletePurgeDefault,
   moveSessionToWorkspace,
@@ -928,11 +927,6 @@ export default function Sidebar(): JSX.Element {
           )}
         </div>
       )}
-
-      <button className="ws-add" onClick={() => void addWorkspaceDir()} title="把一个目录登记到列表">
-        <IconPlus size={12} />
-        添加工作目录
-      </button>
 
       {hint && <div className="ws-hint">{hint}</div>}
 

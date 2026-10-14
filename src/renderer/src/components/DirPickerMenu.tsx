@@ -8,7 +8,7 @@ import { IconFolder } from './Icons'
 /**
  * 新建任务的目录选择菜单（参考 Cursor 的 Recents 弹层）：
  * 列出最近用过的目录（会话 cwd ∪ 手动登记的目录，按最近活动排序，别名优先），
- * 点选即以该目录新建任务；底部「浏览文件夹…」走系统目录选择框选一个新目录。
+ * 点选即以该目录新建任务；底部「添加工作目录…」走系统目录选择框选一个新目录。
  * 主目录（「聊天」组）不出现在列表里 —— 随聊有独立的「新建聊天」入口。
  */
 export default function DirPickerMenu({
@@ -82,7 +82,7 @@ export default function DirPickerMenu({
     <div className="dir-menu" ref={menuRef} style={{ left: pos.left, top: pos.top }} role="menu">
       <div className="dir-menu-head">选择工作目录</div>
       <div className="dir-menu-list">
-        {groups.length === 0 && <div className="dir-menu-empty">暂无最近目录，请浏览选择</div>}
+        {groups.length === 0 && <div className="dir-menu-empty">暂无最近目录，请添加工作目录</div>}
         {groups.map((g) => (
           <button
             key={g.key}
@@ -100,7 +100,7 @@ export default function DirPickerMenu({
       <div className="dir-menu-sep" />
       <button className="dir-menu-item" role="menuitem" onClick={() => void browse()}>
         <IconFolder size={14} />
-        <span className="dir-menu-label">浏览文件夹…</span>
+        <span className="dir-menu-label">添加工作目录…</span>
       </button>
     </div>
   )
