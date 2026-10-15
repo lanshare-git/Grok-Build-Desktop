@@ -1,3 +1,4 @@
+import { useT, type MessageKey } from '../i18n'
 import { useStore } from '../store'
 import { stringifyPretty } from '../utils'
 import type { PermissionRequestEvent } from '@shared/types'
@@ -7,22 +8,25 @@ interface PermissionOptionLike {
   kind?: string
 }
 
-/** 把 agent 返回的英文选项名映射为中文；未匹配到时原样返回 */
-export function zhOptionName(opt: PermissionOptionLike): string {
+/** 把 agent 返回的英文选项名映射为界面语言文案；未匹配到时原样返回 */
+export function localizedOptionName(
+  opt: PermissionOptionLike,
+  t: (key: MessageKey) => string
+): string {
   const name = opt.name ?? ''
   const kind = (opt.kind ?? '').toLowerCase()
   // 标准 ACP kind 优先
-  if (kind === 'allow_once') return '允许（仅本次）'
-  if (kind === 'allow_always') return '允许（不再询问）'
-  if (kind === 'reject_once') return '拒绝（仅本次）'
-  if (kind === 'reject_always') return '拒绝（不再询问）'
+  if (kind === 'allow_once') return t('prompts.perm.allowOnce')
+  if (kind === 'allow_always') return t('prompts.perm.allowAlways')
+  if (kind === 'reject_once') return t('prompts.perm.rejectOnce')
+  if (kind === 'reject_always') return t('prompts.perm.rejectAlways')
   // grok agent 固定的英文选项名
   const n = name.toLowerCase()
-  if (/don'?t ask again for bash/.test(n)) return '允许，且同类命令不再询问'
-  if (/tell grok|do differently/.test(n)) return '拒绝，并告诉 Grok 改用别的做法'
-  if (/don'?t ask again/.test(n)) return '拒绝，且此命令不再询问'
-  if (/^(yes|allow|proceed|approve)/.test(n)) return '允许本次执行'
-  if (/^(no|deny|reject)/.test(n)) return '拒绝'
+  if (/don'?t ask again for bash/.test(n)) return t('prompts.perm.allowSameBash')
+  if (/tell grok|do differently/.test(n)) return t('prompts.perm.rejectTellGrok')
+  if (/don'?t ask again/.test(n)) return t('prompts.perm.rejectNoAsk')
+  if (/^(yes|allow|proceed|approve)/.test(n)) return t('prompts.perm.allow')
+  if (/^(no|deny|reject)/.test(n)) return t('prompts.perm.reject')
   return name
 }
 
@@ -38,6 +42,7 @@ export default function PermissionPanel({
 }: {
   request: PermissionRequestEvent
 }): JSX.Element {
+  const t = useT()
   const input = stringifyPretty(request.toolCall?.rawInput, 1200)
 
   const decide = (optionId: string | null): void => {
@@ -49,11 +54,13 @@ export default function PermissionPanel({
   return (
     <div className="prompt-card prompt-card-perm">
       <div className="prompt-head">
-        <span className="prompt-badge">待授权</span>
-        <span className="prompt-title">工具执行请求</span>
+        <span className="prompt-badge">{t('prompts.perm.badge')}</span>
+        <span className="prompt-title">{t('prompts.perm.title')}</span>
       </div>
       <div className="prompt-sub">
-        Agent 想要执行 <strong>{request.toolCall?.title ?? '一个工具'}</strong>
+        {t('prompts.perm.wantPre')}
+        <strong>{request.toolCall?.title ?? t('prompts.perm.fallbackTool')}</strong>
+        {t('prompts.perm.wantPost')}
         {request.toolCall?.toolName && <code className="inline-code">{request.toolCall.toolName}</code>}
       </div>
 
@@ -69,12 +76,12 @@ export default function PermissionPanel({
               title={opt.name ?? opt.optionId}
               onClick={() => decide(opt.optionId)}
             >
-              {zhOptionName(opt)}
+              {localizedOptionName(opt, t)}
             </button>
           )
         })}
         <button className="btn btn-ghost" onClick={() => decide(null)}>
-          拒绝
+          {t('prompts.perm.reject')}
         </button>
       </div>
     </div>

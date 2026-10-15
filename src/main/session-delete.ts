@@ -39,6 +39,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path'
 import { app, shell } from 'electron'
 
 import { resolveGrokHome } from './acp/service'
+import { t } from './i18n'
 import { encodeSessionDirVariants } from './session-activity'
 
 export type DeleteMethod = 'trash' | 'quarantine'
@@ -158,9 +159,9 @@ export async function deleteSessionData(
   cwd: string,
   sessionId: string
 ): Promise<DeleteSessionDataResult> {
-  if (!cwd || typeof cwd !== 'string') return { ok: false, error: '会话缺少工作目录' }
+  if (!cwd || typeof cwd !== 'string') return { ok: false, error: t('mainErrors.sessionDelete.missingCwd') }
   if (!sessionId || !isSafeSessionId(sessionId)) {
-    return { ok: false, error: '会话 ID 不合法，已拒绝删除' }
+    return { ok: false, error: t('mainErrors.sessionDelete.invalidId') }
   }
 
   const sessionsRoot = resolve(join(resolveGrokHome(), 'sessions'))
@@ -211,13 +212,15 @@ export async function deleteSessionData(
       return {
         ok: false,
         path: target,
-        error: `删除失败（该会话可能正被 grok 占用）：原目录仍有会话数据。数据副本已存于应用内回收站：${dest}`
+        error: t('mainErrors.sessionDelete.dataRemain', { path: dest })
       }
     } catch (err) {
       return {
         ok: false,
         path: target,
-        error: `删除失败（该会话可能正被 grok 占用）：${err instanceof Error ? err.message : String(err)}`
+        error: t('mainErrors.sessionDelete.failed', {
+          message: err instanceof Error ? err.message : String(err)
+        })
       }
     }
   }

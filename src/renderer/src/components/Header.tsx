@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 
 import { applyPermissionModeToSession, changeConfigOption, chooseWorkspace } from '../actions'
+import { useLocale, useT } from '../i18n'
 import { useStore } from '../store'
 import { formatNumber, isLockedChat, sessionDisplayTitle } from '../utils'
 import type { PermissionMode } from '@shared/types'
@@ -9,6 +10,8 @@ import DirPickerMenu from './DirPickerMenu'
 import { IconFolder, IconGauge, IconPlus } from './Icons'
 
 export default function Header(): JSX.Element {
+  const t = useT()
+  const locale = useLocale()
   const session = useStore((s) => s.sessions.find((x) => x.id === s.activeId))
   const homeDir = useStore((s) => s.homeDir)
   const permissionMode = useStore((s) => s.permissionMode)
@@ -24,12 +27,13 @@ export default function Header(): JSX.Element {
 
   if (!session) return <div className="header" />
 
-  const title = sessionDisplayTitle(session)
+  const title = sessionDisplayTitle(session, locale)
   const isChat = session.kind === 'chat'
   // 只读锁定只对「还在主目录下的纯聊天会话」生效：搬到项目目录后就已经绑定项目，
   // 该和普通任务一样可以自选权限模式（见 utils.isLockedChat 的说明）
   const locked = isLockedChat(session, homeDir)
   const effectiveMode: PermissionMode = locked ? 'plan' : permissionMode
+  const modeDescKey = PERMISSION_MODE_OPTIONS.find((m) => m.value === permissionMode)?.descKey
 
   const startRename = (): void => {
     // 预填「当前显示名」，不必重打一遍
@@ -57,7 +61,7 @@ export default function Header(): JSX.Element {
             autoFocus
             value={draft}
             placeholder={session.title}
-            title="直接编辑；留空或改回原标题，则恢复跟随 grok 的自动标题"
+            title={t('header.renameInputTitle')}
             onChange={(e) => setDraft(e.target.value)}
             onFocus={(e) => e.currentTarget.select()}
             onBlur={commitRename}
@@ -71,12 +75,12 @@ export default function Header(): JSX.Element {
             className="header-title"
             title={
               (session.customTitle
-                ? `${title}\n（双击改名；原名：${session.title}）`
-                : `${title}\n（双击改名）`) +
+                ? t('header.titleRenameWithOriginal', { title, original: session.title })
+                : t('header.titleRename', { title })) +
               (isChat && locked
-                ? '\n聊天会话：固定以主目录为根、不绑定项目，已锁定为只读（不写文件）'
+                ? t('header.titleLockedChatSuffix')
                 : isChat
-                  ? '\n由聊天会话搬来的任务：已绑定项目，可按普通任务自选权限模式'
+                  ? t('header.titleMovedChatSuffix')
                   : '')
             }
             onDoubleClick={startRename}
@@ -87,7 +91,7 @@ export default function Header(): JSX.Element {
         <button
           ref={newTaskRef}
           className="icon-btn"
-          title="新建任务（选择工作目录）"
+          title={t('header.newTaskTitle')}
           onClick={() => setDirMenuOpen((v) => !v)}
         >
           <IconPlus size={13} />
@@ -97,10 +101,10 @@ export default function Header(): JSX.Element {
           disabled={locked}
           title={
             locked
-              ? '聊天会话固定以主目录为根，不可切换目录；要切换工作目录请新建普通任务'
+              ? t('header.pathTitleLocked')
               : isChat
-                ? `当前会话工作目录：${session.cwd}\n点击选择目录后，会以该目录「新建」一个任务，当前会话保持不变`
-                : `当前会话工作目录：${session.cwd}\n点击选择目录后，会以该目录「新建」一个任务，当前会话保持不变\n要改当前会话自己的目录：在左侧会话行「☰」菜单里选「移动到工作目录」（生成中的会话不能移动）`
+                ? t('header.pathTitleChat', { cwd: session.cwd })
+                : t('header.pathTitleTask', { cwd: session.cwd })
           }
           onClick={() => void chooseWorkspace()}
         >
@@ -115,7 +119,7 @@ export default function Header(): JSX.Element {
             className="chip chip-select"
             value={modelOption.currentValue ?? ''}
             onChange={(e) => void changeConfigOption('model', e.target.value)}
-            title="模型"
+            title={t('header.model')}
           >
             {(modelOption.options ?? []).map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -130,7 +134,7 @@ export default function Header(): JSX.Element {
             className="chip chip-select"
             value={effortOption.currentValue ?? ''}
             onChange={(e) => void changeConfigOption('reasoning_effort', e.target.value)}
-            title="推理强度"
+            title={t('header.effort')}
           >
             {(effortOption.options ?? []).map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -152,17 +156,15 @@ export default function Header(): JSX.Element {
           }}
           title={
             locked
-              ? '聊天会话已锁定为只读（计划模式），不可更改'
+              ? t('header.modeTitleLocked')
               : isChat
-                ? '该会话由聊天搬来，已可按普通任务切换权限模式'
-                : `权限模式 · ${
-                    PERMISSION_MODE_OPTIONS.find((m) => m.value === permissionMode)?.desc ?? ''
-                  }`
+                ? t('header.modeTitleChat')
+                : t('header.modeTitle', { desc: modeDescKey ? t(modeDescKey) : '' })
           }
         >
           {PERMISSION_MODE_OPTIONS.map((m) => (
             <option key={m.value} value={m.value}>
-              {m.label}
+              {t(m.labelKey)}
             </option>
           ))}
         </select>
@@ -172,10 +174,12 @@ export default function Header(): JSX.Element {
           className={`chip chip-usage chip-button${usage ? '' : ' chip-usage-icon'}`}
           title={
             usage
-              ? `上一轮：输入 ${usage.inputTokens ?? 0} · 输出 ${usage.outputTokens ?? 0} · 缓存读 ${
-                  usage.cacheReadInputTokens ?? 0
-                }\n点击查看本会话逐轮明细与全部会话累计`
-              : '用量：点击查看本会话逐轮明细与全部会话累计'
+              ? t('header.usageTitle', {
+                  input: usage.inputTokens ?? 0,
+                  output: usage.outputTokens ?? 0,
+                  cacheRead: usage.cacheReadInputTokens ?? 0
+                })
+              : t('header.usageTitleEmpty')
           }
           onClick={() => openUsage(session.id)}
         >

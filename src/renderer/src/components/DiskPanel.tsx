@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 
 import { cleanError } from '../actions'
 import { useStore } from '../store'
+import { useT } from '../i18n'
 import type { DiskUsageReport, MemoryClearScope } from '@shared/types'
 import ConfirmDialog from './ConfirmDialog'
 import type { ConfirmSpec } from './ConfirmDialog'
@@ -28,6 +29,7 @@ function fmtBytes(bytes: number): string {
 }
 
 export default function DiskPanel(): JSX.Element {
+  const t = useT()
   const cwd = useStore((s) => s.cwd)
 
   const [du, setDu] = useState<DiskUsageReport | null>(null)
@@ -54,14 +56,14 @@ export default function DiskPanel(): JSX.Element {
     // 进入面板刷新一次即可
   }, [])
 
-  const clearMemory = async (scope: MemoryClearScope, label: string): Promise<void> => {
+  const clearMemory = async (scope: MemoryClearScope, doneText: string): Promise<void> => {
     if (busy) return
     setBusy(true)
     setError(null)
     setNotice(null)
     try {
       await window.grok.memoryClear(scope, cwd)
-      setNotice(`${label}已完成。`)
+      setNotice(doneText)
       await reload()
     } catch (err) {
       setError(cleanError(err))
@@ -74,10 +76,8 @@ export default function DiskPanel(): JSX.Element {
 
   return (
     <div className="settings-page">
-      <div className="settings-page-title">存储占用</div>
-      <div className="settings-page-sub">
-        grok 目录（~/.grok）占用的磁盘空间（等价终端 <code>grok du</code>）
-      </div>
+      <div className="settings-page-title">{t('panels.disk.title')}</div>
+      <div className="settings-page-sub">{t('panels.disk.subtitle')}</div>
 
       {error && <div className="mcp-form-error">{error}</div>}
       {notice && <div className="mcp-hint">{notice}</div>}
@@ -85,14 +85,16 @@ export default function DiskPanel(): JSX.Element {
       <div className="settings-group">
         <div className="settings-row">
           <div className="settings-row-label">
-            <span className="settings-row-title">磁盘占用</span>
+            <span className="settings-row-title">{t('panels.disk.sectionTitle')}</span>
             <span className="settings-row-desc">
-              {du?.grokHome ? `${du.grokHome} · 合计 ${fmtBytes(du.totalBytes)}` : '正在统计…'}
+              {du?.grokHome
+                ? t('panels.disk.sectionDesc', { home: du.grokHome, total: fmtBytes(du.totalBytes) })
+                : t('panels.disk.sectionLoading')}
             </span>
           </div>
           <button className="btn btn-ghost" disabled={loading} onClick={() => void reload()}>
             <IconRefresh size={13} />
-            重新统计
+            {t('panels.disk.refresh')}
           </button>
         </div>
         <div className="du-list">
@@ -108,13 +110,10 @@ export default function DiskPanel(): JSX.Element {
               <span className="du-bytes">{fmtBytes(d.bytes)}</span>
             </div>
           ))}
-          {(du?.dirs.length ?? 0) === 0 && !loading && <div className="mcp-hint">暂无数据。</div>}
+          {(du?.dirs.length ?? 0) === 0 && !loading && <div className="mcp-hint">{t('panels.disk.empty')}</div>}
         </div>
         {du && du.dirs.length > 0 && (
-          <div className="mcp-hint">
-            占用最大的一般是 <code>bin</code>（agent 本体）与 <code>sessions</code>（会话历史）。
-            要回收空间请到「Worktree」分区清理闲置副本，或删除不再需要的会话。
-          </div>
+          <div className="mcp-hint">{t('panels.disk.hint')}</div>
         )}
       </div>
 
@@ -122,35 +121,33 @@ export default function DiskPanel(): JSX.Element {
       <div className="settings-group">
         <div className="settings-row">
           <div className="settings-row-label">
-            <span className="settings-row-title">跨会话记忆</span>
-            <span className="settings-row-desc">
-              grok 记住的偏好与项目背景（~/.grok/memory-v2）；清空后需要重新积累
-            </span>
+            <span className="settings-row-title">{t('panels.disk.memoryTitle')}</span>
+            <span className="settings-row-desc">{t('panels.disk.memoryDesc')}</span>
           </div>
           <div className="close-action-setting">
             <button
               className="btn btn-ghost"
               disabled={busy}
-              onClick={() => void clearMemory('workspace', '工作区记忆清空')}
+              onClick={() => void clearMemory('workspace', t('panels.disk.clearWorkspaceDone'))}
             >
-              清空工作区
+              {t('panels.disk.clearWorkspace')}
             </button>
             <button
               className="btn btn-danger"
               disabled={busy}
               onClick={() =>
                 setConfirm({
-                  title: '清空全部记忆？',
-                  message: '将同时清空工作区与全局记忆。',
-                  detail: 'grok 对你的了解会归零，之后需要重新积累。此操作不可撤销。',
-                  confirmText: '全部清空',
-                  cancelText: '取消',
+                  title: t('panels.disk.clearAllConfirmTitle'),
+                  message: t('panels.disk.clearAllConfirmMessage'),
+                  detail: t('panels.disk.clearAllConfirmDetail'),
+                  confirmText: t('panels.disk.clearAllConfirmOk'),
+                  cancelText: t('common.cancel'),
                   danger: true,
-                  onConfirm: () => void clearMemory('all', '记忆全部清空')
+                  onConfirm: () => void clearMemory('all', t('panels.disk.clearAllDone'))
                 })
               }
             >
-              全部清空
+              {t('panels.disk.clearAll')}
             </button>
           </div>
         </div>

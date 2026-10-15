@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 
 import { connectAgent, resumeSession } from '../actions'
+import { useT } from '../i18n'
 import { useStore, type Toast } from '../store'
 import { IconClose } from './Icons'
 
@@ -27,6 +28,7 @@ export default function ToastStack(): JSX.Element | null {
 }
 
 function ToastItem({ toast }: { toast: Toast }): JSX.Element {
+  const t = useT()
   const dismiss = useStore((s) => s.dismissToast)
   const actionable = Boolean(toast.sessionId || toast.action)
 
@@ -59,12 +61,12 @@ function ToastItem({ toast }: { toast: Toast }): JSX.Element {
         {toast.text && <div className="toast-text">{toast.text}</div>}
         {actionable && (
           <div className="toast-action">
-            {toast.action === 'reconnect' ? '重新连接' : '前往处理'}
+            {toast.action === 'reconnect' ? t('prompts.toast.reconnect') : t('prompts.toast.goHandle')}
             <span className="toast-action-arrow">→</span>
           </div>
         )}
       </div>
-      <button className="toast-close" title="关闭" onClick={() => dismiss(toast.id)}>
+      <button className="toast-close" title={t('common.close')} onClick={() => dismiss(toast.id)}>
         <IconClose size={13} />
       </button>
     </div>

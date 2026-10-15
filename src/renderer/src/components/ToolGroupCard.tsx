@@ -1,6 +1,7 @@
 import { memo, useState } from 'react'
 
 import type { ChatItem } from '@shared/types'
+import { useT } from '../i18n'
 import { toolIconName } from '../utils'
 import ToolCallCard from './ToolCallCard'
 import { IconChevron, IconClose, IconFile, IconList, IconSearch, IconStop, IconTerminal } from './Icons'
@@ -19,6 +20,7 @@ type ToolItem = Extract<ChatItem, { kind: 'tool' }>
  */
 function ToolGroupCardImpl({ items }: { items: ToolItem[] }): JSX.Element {
   const [open, setOpen] = useState(false)
+  const t = useT()
 
   const first = items[0]
   const toolName = first.toolName || first.title
@@ -49,16 +51,16 @@ function ToolGroupCardImpl({ items }: { items: ToolItem[] }): JSX.Element {
         {failed > 0 && (
           <span className="tool-status">
             <IconClose size={13} className="status-err" />
-            {failed} 个失败
+            {t('tool.group.failedCount', { n: failed })}
           </span>
         )}
         {interrupted > 0 && (
           <span className="tool-status">
             <IconStop size={13} className="status-warn" />
-            {interrupted} 个中断
+            {t('tool.group.interruptedCount', { n: interrupted })}
           </span>
         )}
-        {running > 0 && <span className="tool-status">进行中</span>}
+        {running > 0 && <span className="tool-status">{t('tool.group.inProgress')}</span>}
       </button>
 
       {open && (

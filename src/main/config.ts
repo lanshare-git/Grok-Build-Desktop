@@ -7,6 +7,7 @@ import { app } from 'electron'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type { CloseAction } from '../shared/types'
+import type { Locale } from '../shared/i18n/types'
 
 export interface AppConfig {
   /**
@@ -33,13 +34,19 @@ export interface AppConfig {
    * 会话数据一旦删除，只能去回收站找回，所以给用户一个改默认值的入口。
    */
   deleteDiskFilesByDefault: boolean
+  /**
+   * 界面语言：'zh-CN' | 'en' | 'ja'；null = 跟随系统（启动时按 app.getLocale() 归一）。
+   * 语言的唯一事实源在这里；渲染进程 store.locale 只是它的缓存。
+   */
+  locale: Locale | null
 }
 
 const DEFAULTS: AppConfig = {
   proxy: null,
   proxyAutoDetected: false,
   closeAction: null,
-  deleteDiskFilesByDefault: true
+  deleteDiskFilesByDefault: true,
+  locale: null
 }
 
 function configFile(): string {

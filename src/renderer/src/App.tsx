@@ -23,6 +23,7 @@ import Welcome from './components/Welcome'
 import { enqueueStreamEvent } from './stream-queue'
 import { useStore } from './store'
 import { sessionDisplayTitle } from './utils'
+import { t as tShared } from '@shared/i18n'
 
 /** 非当前任务的授权/提问 → 弹右下角全局提示，点击即可跳到那个任务去处理 */
 function notifyBackgroundPrompt(
@@ -31,15 +32,15 @@ function notifyBackgroundPrompt(
 ): void {
   const st = useStore.getState()
   const session = st.sessions.find((x) => x.id === sessionId)
-  const name = session ? sessionDisplayTitle(session) : '后台任务'
+  const name = session ? sessionDisplayTitle(session, st.locale) : tShared(st.locale, 'common.backgroundTask')
   st.pushToast({
     id: `prompt-${info.kind}-${info.requestId}`,
     level: 'warn',
-    title: info.kind === 'perm' ? '任务需要授权' : '任务正在提问',
+    title: info.kind === 'perm' ? tShared(st.locale, 'common.promptPermTitle') : tShared(st.locale, 'common.promptQuestionTitle'),
     text:
       info.kind === 'perm'
-        ? `「${name}」请求执行：${info.label}`
-        : `「${name}」需要你的选择才能继续`,
+        ? tShared(st.locale, 'common.promptPermText', { name, label: info.label ?? '' })
+        : tShared(st.locale, 'common.promptQuestionText', { name }),
     sessionId,
     requestId: info.requestId,
     ttl: 0
@@ -75,20 +76,22 @@ export default function App(): JSX.Element {
         }
         // 连接异常改走右下角提示，不再占用任务界面
         if (e.state === 'error') {
+          const loc = st.locale
           st.pushToast({
             id: 'conn-error',
             level: 'error',
-            title: 'Agent 连接异常',
-            text: e.message ?? '与 Grok Build 进程的连接已中断',
+            title: tShared(loc, 'common.connErrorTitle'),
+            text: e.message ?? tShared(loc, 'common.connErrorText'),
             action: 'reconnect',
             ttl: 0
           })
         } else if (e.state === 'stopped' && prev === 'ready') {
+          const loc = st.locale
           st.pushToast({
             id: 'conn-stopped',
             level: 'warn',
-            title: 'Agent 已停止',
-            text: e.message ?? '后台进程已退出，需要重新连接才能继续',
+            title: tShared(loc, 'common.connStoppedTitle'),
+            text: e.message ?? tShared(loc, 'common.connStoppedText'),
             action: 'reconnect',
             ttl: 0
           })
@@ -128,7 +131,9 @@ export default function App(): JSX.Element {
       window.grok.onFocusSession(({ sessionId }) => {
         const session = useStore.getState().sessions.find((x) => x.id === sessionId)
         if (session) void resumeSession(session.id, session.cwd)
-      })
+      }),
+      // 语言广播：任一窗口/入口切换后同步本窗口缓存
+      window.grok.onLocaleChanged((l) => useStore.getState().setLocale(l))
     ]
 
     void (async () => {
@@ -145,6 +150,12 @@ export default function App(): JSX.Element {
         useStore.getState().setAppVersion(await window.grok.appVersion())
       } catch (err) {
         useStore.getState().pushLog(`[app-version] 读取失败：${cleanError(err)}`)
+      }
+      // 语言回源校正：store 初始值只是 navigator.language 的同步归一，以主进程 config.json 为准
+      try {
+        useStore.getState().setLocale((await window.grok.getLocale()).resolved)
+      } catch {
+        /* 忽略：保留首帧的归一值 */
       }
       await refreshDiagnostics()
       // 工具卡展示密度与终端共用 config.toml，启动时读一次
@@ -164,12 +175,13 @@ export default function App(): JSX.Element {
   }, [])
 
   if (bridgeMissing) {
+    const loc = useStore.getState().locale
     return (
       <div className="welcome">
         <div className="welcome-card">
-          <h1>无法加载应用桥接层</h1>
+          <h1>{tShared(loc, 'common.bridgeMissingTitle')}</h1>
           <p className="welcome-lead">
-            preload 脚本未能注入，渲染进程拿不到主进程能力。请重启应用；若持续出现，请检查构建产物是否完整。
+            {tShared(loc, 'common.bridgeMissingBody')}
           </p>
         </div>
       </div>

@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 import { closeAgentSession, exportSessionMarkdown, exportSessionTrace } from '../actions'
+import { useT } from '../i18n'
 import { useStore } from '../store'
 import { sessionDisplayTitle } from '../utils'
 import type { SessionMeta } from '@shared/types'
@@ -43,6 +44,8 @@ export default function SessionToolsMenu({
 }): JSX.Element | null {
   const loadedSessions = useStore((s) => s.loadedSessions)
   const running = useStore((s) => s.running)
+  const t = useT()
+  const locale = useStore((s) => s.locale)
   const menuRef = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -86,7 +89,7 @@ export default function SessionToolsMenu({
 
   if (!pos) return null
 
-  const title = sessionDisplayTitle(session)
+  const title = sessionDisplayTitle(session, locale)
   const isLoaded = loadedSessions.includes(session.id)
   // 生成中不允许卸载：那一回合还占着 agent 的会话 actor，关掉会打断输出
   const isRunning = running.includes(session.id)
@@ -97,10 +100,10 @@ export default function SessionToolsMenu({
     try {
       const res = await exportSessionMarkdown({ id: session.id, cwd: session.cwd, title })
       if (res.ok) {
-        setNote(`已导出到 ${res.path}`)
+        setNote(t('sessionTools.exported', { path: String(res.path) }))
         if (res.path) void window.grok.revealPath(res.path)
       } else if (res.message) {
-        setNote(`导出失败：${res.message}`)
+        setNote(t('sessionTools.failed', { message: res.message }))
       }
     } finally {
       setBusy(null)
@@ -113,10 +116,10 @@ export default function SessionToolsMenu({
     try {
       const res = await exportSessionTrace({ id: session.id, cwd: session.cwd })
       if (res.ok) {
-        setNote(`诊断包已生成：${res.path}`)
+        setNote(t('sessionTools.traceDone', { path: String(res.path) }))
         if (res.path) void window.grok.revealPath(res.path)
       } else {
-        setNote(`导出失败：${res.message ?? res.path ?? '未知错误'}`)
+        setNote(t('sessionTools.failed', { message: res.message ?? res.path ?? t('sessionTools.unknownError') }))
       }
     } finally {
       setBusy(null)
@@ -127,9 +130,9 @@ export default function SessionToolsMenu({
     setBusy('close')
     try {
       await closeAgentSession(session.id)
-      setNote('已从 agent 卸载（磁盘数据保留）')
+      setNote(t('sessionTools.unloaded'))
     } catch (err) {
-      setNote(`卸载失败：${err instanceof Error ? err.message : String(err)}`)
+      setNote(t('sessionTools.unloadFailed', { message: err instanceof Error ? err.message : String(err) }))
     } finally {
       setBusy(null)
     }
@@ -149,18 +152,18 @@ export default function SessionToolsMenu({
         onClick={() => void doExport()}
       >
         <IconFile size={15} />
-        {busy === 'export' ? '导出中…' : '导出为 Markdown'}
+        {busy === 'export' ? t('sessionTools.exporting') : t('sessionTools.exportMarkdown')}
       </button>
 
       <button
         className="account-menu-item"
         role="menuitem"
         disabled={busy !== null || session.isDraft}
-        title={session.isDraft ? '草稿会话尚未落盘，无法导出诊断包' : '导出诊断数据（只落本地，不上传）'}
+        title={session.isDraft ? t('sessionTools.traceTitleDraft') : t('sessionTools.traceTitle')}
         onClick={() => void doTrace()}
       >
         <IconDownload size={15} />
-        {busy === 'trace' ? '打包中…' : '导出诊断包'}
+        {busy === 'trace' ? t('sessionTools.tracing') : t('sessionTools.trace')}
       </button>
 
       <button
@@ -169,38 +172,38 @@ export default function SessionToolsMenu({
         disabled={busy !== null || !isLoaded || isRunning}
         title={
           isRunning
-            ? '正在生成中，无法卸载'
+            ? t('sessionTools.unloadTitleRunning')
             : isLoaded
-              ? '释放 agent 进程内该会话占用的内存，磁盘数据保留（当前会话会立即重新加载）'
-              : '该会话当前不在 agent 进程内，无需卸载'
+              ? t('sessionTools.unloadTitleLoaded')
+              : t('sessionTools.unloadTitleUnloaded')
         }
         onClick={() => void doClose()}
       >
         <IconPower size={15} />
-        {busy === 'close' ? '卸载中…' : '卸载会话（保留数据）'}
+        {busy === 'close' ? t('sessionTools.unloading') : t('sessionTools.unload')}
       </button>
 
       <div className="account-menu-sep" />
 
       {moveTargets.length > 0 && (
         <>
-          <div className="account-menu-label">移动到工作目录</div>
+          <div className="account-menu-label">{t('sessionTools.moveLabel')}</div>
           <div className="session-tools-moves">
-            {moveTargets.map((t) => (
+            {moveTargets.map((target) => (
               <button
-                key={t.key}
+                key={target.key}
                 className="account-menu-item"
                 role="menuitem"
                 disabled={busy !== null || isRunning}
                 title={
                   isRunning
-                    ? '正在生成中，等这一轮结束再移动'
-                    : `把该会话的磁盘记录搬到 ${t.path}，之后就在这个目录里跑`
+                    ? t('sessionTools.moveTitleRunning')
+                    : t('sessionTools.moveTitle', { path: target.path })
                 }
-                onClick={() => onRequestMove(t.path, t.label)}
+                onClick={() => onRequestMove(target.path, target.label)}
               >
                 <IconFolder size={15} />
-                <span className="session-tools-move-label">{t.label}</span>
+                <span className="session-tools-move-label">{target.label}</span>
               </button>
             ))}
           </div>
@@ -212,14 +215,14 @@ export default function SessionToolsMenu({
         className="account-menu-item is-danger"
         role="menuitem"
         disabled={busy !== null}
-        title="删除会话（可选择是否连磁盘一起删除）"
+        title={t('sessionTools.deleteTitle')}
         onClick={() => {
           onClose()
           onRequestDelete()
         }}
       >
         <IconTrash size={15} />
-        删除会话
+        {t('sessionTools.delete')}
       </button>
 
       {note && <div className="account-menu-note">{note}</div>}

@@ -1,6 +1,7 @@
 /** 渲染层小工具 */
 
 import type { SessionMeta, WorkspaceMeta } from '@shared/types'
+import { t as tShared, type Locale } from '@shared/i18n'
 
 /** 目录规范化：统一分隔符、去掉结尾分隔符（盘符根保留 `C:\`） */
 export function normalizeDir(p: string): string {
@@ -36,9 +37,9 @@ export function isLockedChat(
 }
 
 /** 会话展示标题：用户手动改的名字优先，否则用 grok 自动生成的标题 */
-export function sessionDisplayTitle(session: SessionMeta): string {
+export function sessionDisplayTitle(session: SessionMeta, locale: Locale): string {
   const custom = session.customTitle?.trim()
-  return custom || session.title || '未命名会话'
+  return custom || session.title || tShared(locale, 'common.untitledSession')
 }
 
 /**
@@ -85,7 +86,8 @@ export interface WorkspaceGroup {
 export function groupSessionsByWorkspace(
   sessions: SessionMeta[],
   workspaces: WorkspaceMeta[],
-  homeDir?: string | null
+  homeDir?: string | null,
+  locale: Locale = 'zh-CN'
 ): WorkspaceGroup[] {
   const groups = new Map<string, WorkspaceGroup>()
 
@@ -122,7 +124,7 @@ export function groupSessionsByWorkspace(
 
   // 聊天组固定叫「聊天」（用户没手动改过别名时），它代表"非项目"的闲聊归属
   for (const group of groups.values()) {
-    if (group.isHome && !group.aliased) group.label = '聊天'
+    if (group.isHome && !group.aliased) group.label = tShared(locale, 'common.chatGroup')
   }
 
   const list = [...groups.values()]
@@ -149,17 +151,19 @@ export function groupSessionsByWorkspace(
   )
 }
 
-export function relativeTime(ts: number): string {
+export function relativeTime(ts: number, locale: Locale): string {
   const diff = Date.now() - ts
   const sec = Math.floor(diff / 1000)
-  if (sec < 60) return '刚刚'
+  if (sec < 60) return tShared(locale, 'common.time.justNow')
+  // Intl.RelativeTimeFormat 自带各语言的单位与语序（numeric:'auto' 给「昨天/yesterday」这类自然词）
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' })
   const min = Math.floor(sec / 60)
-  if (min < 60) return `${min} 分钟前`
+  if (min < 60) return rtf.format(-min, 'minute')
   const hour = Math.floor(min / 60)
-  if (hour < 24) return `${hour} 小时前`
+  if (hour < 24) return rtf.format(-hour, 'hour')
   const day = Math.floor(hour / 24)
-  if (day < 30) return `${day} 天前`
-  return new Date(ts).toLocaleDateString('zh-CN')
+  if (day < 30) return rtf.format(-day, 'day')
+  return new Date(ts).toLocaleDateString(locale)
 }
 
 export function formatNumber(n?: number): string {

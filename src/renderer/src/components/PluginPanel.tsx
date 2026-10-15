@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 
 import { cleanError, refreshEnvInfo } from '../actions'
 import { useStore } from '../store'
+import { useT } from '../i18n'
 import type { PluginInfo } from '@shared/types'
 import ConfirmDialog from './ConfirmDialog'
 import type { ConfirmSpec } from './ConfirmDialog'
@@ -22,6 +23,7 @@ interface Marketplace {
 }
 
 export default function PluginPanel(): JSX.Element {
+  const t = useT()
   const cwd = useStore((s) => s.cwd)
   const envInfo = useStore((s) => s.envInfo)
 
@@ -79,45 +81,37 @@ export default function PluginPanel(): JSX.Element {
   const install = (): void => {
     const value = source.trim()
     if (!value) {
-      setError('请填写插件来源：git 地址、user/repo 或本地路径。')
+      setError(t('panels.plugins.errSourceRequired'))
       return
     }
     void run(async () => {
       setPlugins(await window.grok.pluginInstall(value, cwd))
-    }, `已安装 ${value}`)
+    }, t('panels.plugins.installed', { source: value }))
     setSource('')
   }
 
   const askUninstall = (plugin: PluginInfo): void => {
     setConfirm({
-      title: '卸载插件？',
-      message: (
-        <>
-          将卸载 <strong>{plugin.name}</strong>，其提供的 hook / MCP / 技能一并失效。
-        </>
-      ),
-      detail: '卸载后会自动重启 agent。若只是临时停用，建议改用「禁用」。',
-      confirmText: '卸载',
-      cancelText: '取消',
+      title: t('panels.plugins.uninstallConfirmTitle'),
+      message: t('panels.plugins.uninstallConfirmMessage', { name: plugin.name }),
+      detail: t('panels.plugins.uninstallConfirmDetail'),
+      confirmText: t('panels.plugins.uninstallConfirmOk'),
+      cancelText: t('common.cancel'),
       danger: true,
       onConfirm: () =>
         void run(async () => {
           setPlugins(await window.grok.pluginUninstall(plugin.name, cwd))
-        }, `已卸载 ${plugin.name}`)
+        }, t('panels.plugins.uninstalled', { name: plugin.name }))
     })
   }
 
   const askRemoveMarket = (market: Marketplace): void => {
     setConfirm({
-      title: '移除插件市场？',
-      message: (
-        <>
-          将移除市场源 <strong>{market.name}</strong>。
-        </>
-      ),
-      detail: '该来源下已安装的插件会一并被卸载。',
-      confirmText: '移除',
-      cancelText: '取消',
+      title: t('panels.plugins.marketRemoveConfirmTitle'),
+      message: t('panels.plugins.marketRemoveConfirmMessage', { name: market.name }),
+      detail: t('panels.plugins.marketRemoveConfirmDetail'),
+      confirmText: t('panels.plugins.marketRemoveConfirmOk'),
+      cancelText: t('common.cancel'),
       danger: true,
       onConfirm: () =>
         void run(async () => {
@@ -130,26 +124,24 @@ export default function PluginPanel(): JSX.Element {
   const addMarket = (): void => {
     const value = marketSource.trim()
     if (!value) {
-      setError('请填写市场源来源。')
+      setError(t('panels.plugins.errMarketSourceRequired'))
       return
     }
     void run(async () => {
       setNotice(await window.grok.marketplaceAdd(value, cwd))
       setMarketSource('')
-    }, `已添加市场源 ${value}`)
+    }, t('panels.plugins.marketAdded', { source: value }))
   }
 
   return (
     <div className="settings-page">
-      <div className="settings-page-title">插件</div>
-      <div className="settings-page-sub">
-        扩展 grok 的能力（hook / MCP / 技能）。与终端版共用 ~/.grok，改动即时同步。
-      </div>
+      <div className="settings-page-title">{t('panels.plugins.title')}</div>
+      <div className="settings-page-sub">{t('panels.plugins.subtitle')}</div>
 
       <div className="drawer-actions">
         <button className="btn btn-ghost" onClick={() => void reload()} disabled={loading}>
           <IconRefresh size={13} />
-          刷新
+          {t('panels.plugins.refresh')}
         </button>
         <button
           className="btn btn-ghost"
@@ -157,10 +149,10 @@ export default function PluginPanel(): JSX.Element {
           onClick={() =>
             void run(async () => {
               setNotice(await window.grok.marketplaceUpdate(cwd))
-            }, '市场源已刷新')
+            }, t('panels.plugins.marketCacheUpdated'))
           }
         >
-          更新市场缓存
+          {t('panels.plugins.updateMarketCache')}
         </button>
       </div>
 
@@ -169,39 +161,37 @@ export default function PluginPanel(): JSX.Element {
 
       {/* 安装 */}
       <div className="mcp-form">
-        <div className="mcp-form-head">从来源安装插件</div>
+        <div className="mcp-form-head">{t('panels.plugins.installTitle')}</div>
         <label className="mcp-field">
-          <span>来源</span>
+          <span>{t('panels.plugins.fieldSource')}</span>
           <input
             className="mcp-input"
             value={source}
             spellCheck={false}
-            placeholder="https://github.com/user/plugin.git ｜ user/repo ｜ D:\local\plugin"
+            placeholder={t('panels.plugins.sourcePlaceholder')}
             onChange={(e) => setSource(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') install()
             }}
           />
-          <span className="mcp-hint">
-            安装时自动视为已信任（桌面端没有可交互的确认提示）；来源可信度请自行确认。
-          </span>
+          <span className="mcp-hint">{t('panels.plugins.sourceHint')}</span>
         </label>
         <div className="mcp-form-actions">
           <button className="btn btn-primary" disabled={busy} onClick={install}>
             <IconPlus size={13} />
-            {busy ? '处理中…' : '安装'}
+            {busy ? t('panels.plugins.installing') : t('panels.plugins.install')}
           </button>
         </div>
       </div>
 
       {/* 已安装 */}
       <div className="mcp-list">
-        {loading && <div className="mcp-empty">正在读取插件列表…</div>}
+        {loading && <div className="mcp-empty">{t('panels.plugins.loadingList')}</div>}
         {!loading && plugins.length === 0 && (
           <div className="mcp-empty">
             <IconPlug size={26} />
-            <p>还没有安装插件</p>
-            <span>可从上方市场源或任意 git 地址安装；终端等价命令：grok plugin install</span>
+            <p>{t('panels.plugins.emptyTitle')}</p>
+            <span>{t('panels.plugins.emptyHint')}</span>
           </div>
         )}
 
@@ -217,7 +207,7 @@ export default function PluginPanel(): JSX.Element {
             {plugin.description && <div className="mcp-card-cmd">{plugin.description}</div>}
             {plugin.source && <div className="mcp-card-cmd">{plugin.source}</div>}
             <div className="mcp-card-actions">
-              <label className="mcp-toggle" title={plugin.enabled ? '点击禁用' : '点击启用'}>
+              <label className="mcp-toggle" title={plugin.enabled ? t('panels.plugins.toggleDisableTitle') : t('panels.plugins.toggleEnableTitle')}>
                 <input
                   type="checkbox"
                   checked={plugin.enabled}
@@ -230,7 +220,7 @@ export default function PluginPanel(): JSX.Element {
                     })
                   }
                 />
-                {plugin.enabled ? '已启用' : '已禁用'}
+                {plugin.enabled ? t('panels.plugins.enabled') : t('panels.plugins.disabled')}
               </label>
               <button
                 className="btn btn-ghost"
@@ -241,9 +231,9 @@ export default function PluginPanel(): JSX.Element {
                 }
                 disabled={busy}
               >
-                组件清单
+                {t('panels.plugins.details')}
               </button>
-              <button className="icon-btn danger" title="卸载" onClick={() => askUninstall(plugin)}>
+              <button className="icon-btn danger" title={t('panels.plugins.uninstallTitle')} onClick={() => askUninstall(plugin)}>
                 <IconTrash size={14} />
               </button>
             </div>
@@ -258,22 +248,22 @@ export default function PluginPanel(): JSX.Element {
       <div className="settings-group">
         <div className="settings-row">
           <div className="settings-row-label">
-            <span className="settings-row-title">插件市场</span>
-            <span className="settings-row-desc">已配置的插件来源（grok plugin marketplace list）</span>
+            <span className="settings-row-title">{t('panels.plugins.marketSectionTitle')}</span>
+            <span className="settings-row-desc">{t('panels.plugins.marketSectionDesc')}</span>
           </div>
         </div>
 
         <div className="settings-row">
           <div className="settings-row-label">
-            <span className="settings-row-title">添加市场源</span>
-            <span className="settings-row-desc">git 地址、GitHub 简写或本地路径</span>
+            <span className="settings-row-title">{t('panels.plugins.marketAddTitle')}</span>
+            <span className="settings-row-desc">{t('panels.plugins.marketAddDesc')}</span>
           </div>
           <div className="close-action-setting">
             <input
               className="mcp-input"
               value={marketSource}
               spellCheck={false}
-              placeholder="user/repo 或 https://github.com/user/marketplace.git"
+              placeholder={t('panels.plugins.marketAddPlaceholder')}
               onChange={(e) => setMarketSource(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') addMarket()
@@ -281,20 +271,20 @@ export default function PluginPanel(): JSX.Element {
             />
             <button className="btn btn-primary" disabled={busy || !marketSource.trim()} onClick={addMarket}>
               <IconPlus size={13} />
-              添加
+              {t('panels.plugins.marketAdd')}
             </button>
           </div>
         </div>
 
         <div className="market-list">
-          {markets.length === 0 && <div className="mcp-hint">尚未配置市场源。</div>}
+          {markets.length === 0 && <div className="mcp-hint">{t('panels.plugins.marketEmpty')}</div>}
           {markets.map((m) => (
             <div key={m.name} className="market-item">
               <div className="market-name">{m.name}</div>
-              <code className="market-git">{m.git || '(本地路径)'}</code>
+              <code className="market-git">{m.git || t('panels.plugins.marketLocalPath')}</code>
               <button
                 className="icon-btn danger"
-                title="移除该市场源"
+                title={t('panels.plugins.marketRemoveTitle')}
                 onClick={() => askRemoveMarket(m)}
               >
                 <IconTrash size={13} />
@@ -308,14 +298,14 @@ export default function PluginPanel(): JSX.Element {
       <div className="settings-group">
         <div className="settings-row">
           <div className="settings-row-label">
-            <span className="settings-row-title">内置技能与子代理</span>
+            <span className="settings-row-title">{t('panels.plugins.skillsTitle')}</span>
             <span className="settings-row-desc">
-              输入「/」即可调用技能；@ 前缀为子代理。清单来自 grok inspect（{envInfo?.cwd ?? cwd}）
+              {t('panels.plugins.skillsDesc', { cwd: envInfo?.cwd ?? cwd })}
             </span>
           </div>
           <button className="btn btn-ghost" disabled={busy} onClick={() => void refreshEnvInfo(cwd)}>
             <IconRefresh size={13} />
-            刷新
+            {t('panels.plugins.skillsRefresh')}
           </button>
         </div>
         <div className="skill-grid">
@@ -329,7 +319,7 @@ export default function PluginPanel(): JSX.Element {
               <span className="skill-name">@{a.name}</span>
             </div>
           ))}
-          {!envInfo && <div className="mcp-hint">正在读取…</div>}
+          {!envInfo && <div className="mcp-hint">{t('panels.plugins.skillsLoading')}</div>}
         </div>
       </div>
 

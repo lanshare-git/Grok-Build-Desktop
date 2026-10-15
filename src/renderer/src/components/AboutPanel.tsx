@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 
 import { getCloseAction, setCloseAction } from '../actions'
 import { useStore } from '../store'
+import { useT } from '../i18n'
 import { IconCopy, IconGrok } from './Icons'
 import type { CloseAction } from '@shared/types'
 
@@ -13,8 +14,8 @@ import type { CloseAction } from '@shared/types'
  *  所以这里同时展示 package.json 的版本号与打包时刻（编译期注入）。
  * ------------------------------------------------------------------ */
 
-function formatBuildTime(iso: string): string {
-  if (!iso) return '未知'
+function formatBuildTime(iso: string, unknownLabel: string): string {
+  if (!iso) return unknownLabel
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
   const p = (n: number): string => String(n).padStart(2, '0')
@@ -22,6 +23,7 @@ function formatBuildTime(iso: string): string {
 }
 
 export default function AboutPanel(): JSX.Element {
+  const t = useT()
   const info = useStore((s) => s.appVersion)
   const grokVersion = useStore((s) => s.diagnostics?.version ?? null)
   const proxy = useStore((s) => s.diagnostics?.proxy ?? null)
@@ -39,10 +41,10 @@ export default function AboutPanel(): JSX.Element {
 
   const copyText = [
     `Grok Build Desktop ${info ? `v${info.version}` : ''}`,
-    info ? `构建于 ${formatBuildTime(info.buildTime)}` : '',
+    info ? t('panels.about.copyLineBuiltAt', { time: formatBuildTime(info.buildTime, t('panels.about.unknown')) }) : '',
     info ? `Electron ${info.electron} / Chromium ${info.chrome} / Node ${info.node}` : '',
     grokVersion ? `Grok Build ${grokVersion}` : '',
-    proxy ? `代理 ${proxy}` : ''
+    proxy ? t('panels.about.copyLineProxy', { proxy }) : ''
   ]
     .filter(Boolean)
     .join('\n')
@@ -56,24 +58,24 @@ export default function AboutPanel(): JSX.Element {
         <div>
           <div className="about-title">Grok Build Desktop</div>
           <div className="about-version">
-            版本 {info ? `v${info.version}` : '读取中…'}
-            {info && !info.packaged && <span className="about-tag">开发模式</span>}
+            {t('panels.about.versionLabel')} {info ? `v${info.version}` : t('panels.about.versionReading')}
+            {info && !info.packaged && <span className="about-tag">{t('panels.about.devModeTag')}</span>}
           </div>
         </div>
       </div>
 
       <div className="about-rows">
         <div className="about-row">
-          <span className="muted">构建时刻</span>
-          <code>{info ? formatBuildTime(info.buildTime) : '—'}</code>
+          <span className="muted">{t('panels.about.rowBuildTime')}</span>
+          <code>{info ? formatBuildTime(info.buildTime, t('panels.about.unknown')) : '—'}</code>
         </div>
         {/* 两个都叫「Grok Build」，标签必须区分开：桌面端是壳，终端是实际干活的 agent */}
         <div className="about-row">
-          <span className="muted">Grok Build 终端</span>
-          <code>{grokVersion ? `v${grokVersion}` : '未知'}</code>
+          <span className="muted">{t('panels.about.rowGrokCli')}</span>
+          <code>{grokVersion ? `v${grokVersion}` : t('panels.about.unknown')}</code>
         </div>
         <div className="about-row">
-          <span className="muted">运行环境</span>
+          <span className="muted">{t('panels.about.rowRuntime')}</span>
           <code>
             {info
               ? `Electron ${info.electron} · Chromium ${info.chrome} · Node ${info.node}`
@@ -81,17 +83,12 @@ export default function AboutPanel(): JSX.Element {
           </code>
         </div>
         <div className="about-row">
-          <span className="muted">网络代理</span>
-          <code>{proxy ?? '直连'}</code>
+          <span className="muted">{t('panels.about.rowProxy')}</span>
+          <code>{proxy ?? t('panels.about.proxyDirect')}</code>
         </div>
       </div>
 
-      <div className="check-hint">
-        每次改动功能都会升一次版本号（修订 / 新增功能 / 不兼容改动分别对应
-        patch / minor / major），并自动记入
-        <code className="inline-code">CHANGELOG.md</code>。报问题时附上「构建时刻」这一行，
-        能直接定位到具体是哪一份产物。
-      </div>
+      <div className="check-hint">{t('panels.about.hint')}</div>
 
       <div className="modal-actions">
         <button
@@ -101,7 +98,7 @@ export default function AboutPanel(): JSX.Element {
           }}
         >
           <IconCopy size={13} />
-          复制版本信息
+          {t('panels.about.copyInfo')}
         </button>
       </div>
     </div>

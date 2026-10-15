@@ -1,9 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 import { logoutAccount } from '../actions'
+import { useT, useLocale, LOCALE_OPTIONS, type Locale, type MessageKey } from '../i18n'
+import { t as tShared } from '@shared/i18n'
 import { useStore } from '../store'
-import type { BillingQuota } from '@shared/types'
-import { IconGauge, IconGear, IconPower } from './Icons'
+import type { BillingQuota, ConnectionState } from '@shared/types'
+import { IconGauge, IconGear, IconGlobe, IconPower } from './Icons'
 
 /** 额度档位：≥90% 红色告警，≥75% 橙色提醒 */
 export function quotaLevel(percent: number): 'ok' | 'warn' | 'danger' {
@@ -13,17 +15,19 @@ export function quotaLevel(percent: number): 'ok' | 'warn' | 'danger' {
 }
 
 /** 「本周用量 45% 已用」/ 「额度不可用」 */
-export function quotaLabel(quota: BillingQuota | null, error: string): string {
-  if (!quota) return error ? '额度暂不可用' : '额度未知'
-  return `已用 ${quota.usedPercent.toFixed(quota.usedPercent % 1 === 0 ? 0 : 1)}%`
+export function quotaLabel(quota: BillingQuota | null, error: string, locale: Locale): string {
+  if (!quota) return tShared(locale, error ? 'accountMenu.quota.unavailable' : 'accountMenu.quota.unknown')
+  return tShared(locale, 'accountMenu.quota.used', {
+    percent: quota.usedPercent.toFixed(quota.usedPercent % 1 === 0 ? 0 : 1)
+  })
 }
 
-const CONNECTION_LABEL: Record<string, string> = {
-  idle: '未连接',
-  starting: '启动中',
-  ready: '已就绪',
-  error: '连接失败',
-  stopped: '已停止'
+const CONNECTION_KEY: Record<ConnectionState, MessageKey> = {
+  idle: 'accountMenu.conn.idle',
+  starting: 'accountMenu.conn.starting',
+  ready: 'accountMenu.conn.ready',
+  error: 'accountMenu.conn.error',
+  stopped: 'accountMenu.conn.stopped'
 }
 
 /**
@@ -39,6 +43,8 @@ export default function AccountMenu({
   anchor: HTMLElement | null
   onClose: () => void
 }): JSX.Element | null {
+  const t = useT()
+  const locale = useLocale()
   const account = useStore((s) => s.account)
   const connection = useStore((s) => s.connection)
   const setSection = useStore((s) => s.setSettingsSection)
@@ -52,6 +58,10 @@ export default function AccountMenu({
   /** 每周额度：菜单每次打开都取一次（主进程 60s 缓存 + 这里每次强制回源） */
   const [quota, setQuota] = useState<BillingQuota | null>(null)
   const [quotaError, setQuotaError] = useState('')
+  /** 语言子菜单展开态（切换语言不关闭菜单） */
+  const [langOpen, setLangOpen] = useState(false)
+  /** 用户显式选择的语言；null = 跟随系统，undefined = 尚未从主进程取回 */
+  const [rawLocale, setRawLocale] = useState<Locale | null | undefined>(undefined)
 
   useEffect(() => {
     let alive = true
@@ -63,12 +73,29 @@ export default function AccountMenu({
         setQuotaError(res.error)
       })
       .catch(() => {
-        if (alive) setQuotaError('额度暂不可用')
+        if (alive) setQuotaError(t('accountMenu.quota.unavailable'))
       })
     return () => {
       alive = false
     }
   }, [])
+
+  // 菜单打开时回源一次语言设置（raw 决定「跟随系统」勾选态）
+  useEffect(() => {
+    let alive = true
+    void window.grok.getLocale().then((res) => {
+      if (alive) setRawLocale(res.raw)
+    })
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  const pickLocale = async (value: Locale | null): Promise<void> => {
+    const picked = await window.grok.setLocale(value)
+    useStore.getState().setLocale(picked.resolved)
+    setRawLocale(picked.raw)
+  }
 
   // 贴着左下角头像行、向上弹出
   useLayoutEffect(() => {
@@ -118,10 +145,17 @@ export default function AccountMenu({
   }
 
   const displayName =
-    [account?.firstName, account?.lastName].filter(Boolean).join(' ') || account?.email || '未登录'
+    [account?.firstName, account?.lastName].filter(Boolean).join(' ') || account?.email || t('accountMenu.notLoggedIn')
   const versionLabel = appVersion
     ? `v${appVersion.version}${appVersion.packaged ? '' : ' ·dev'}`
-    : '版本未知'
+    : t('accountMenu.versionUnknown')
+
+  const localeLabel =
+    rawLocale === undefined
+      ? ''
+      : rawLocale === null
+        ? t('common.followSystem')
+        : (LOCALE_OPTIONS.find((o) => o.value === rawLocale)?.label ?? '')
 
   return (
     <div
@@ -136,7 +170,7 @@ export default function AccountMenu({
         {/* 状态与版本压成一行文字，不做成独立入口 */}
         <div className="account-menu-status">
           <span className={`conn-dot conn-${connection.state}`} />
-          {CONNECTION_LABEL[connection.state] ?? connection.state}
+          {t(CONNECTION_KEY[connection.state])}
           <span className="account-menu-status-sep">·</span>
           {versionLabel}
           {grokVersion ? ` · grok ${grokVersion}` : ''}
@@ -155,8 +189,15 @@ export default function AccountMenu({
         role="menuitem"
         title={
           quota
-            ? `${quota.periodType.replace('USAGE_PERIOD_TYPE_', '')}：${quota.periodStart.slice(0, 10)} 至 ${quota.periodEnd.slice(0, 10)}\n剩余 ${quota.remainingPercent}%\n点击打开「设置 → 用量」`
-            : `${quotaError || '额度信息不可用'}\n点击打开「设置 → 用量」`
+            ? t('accountMenu.quota.tooltip', {
+                period: quota.periodType.replace('USAGE_PERIOD_TYPE_', ''),
+                start: quota.periodStart.slice(0, 10),
+                end: quota.periodEnd.slice(0, 10),
+                remaining: quota.remainingPercent
+              })
+            : t('accountMenu.quota.tooltipUnavailable', {
+                error: quotaError || t('accountMenu.quota.tooltipErrorDefault')
+              })
         }
         onClick={() => {
           // 额度是账号级口径 → 直接跳到设置里的「用量」分区
@@ -166,10 +207,14 @@ export default function AccountMenu({
       >
         <IconGauge size={15} />
         <span className="account-menu-quota-label">
-          {quota ? `${quota.periodType.replace('USAGE_PERIOD_TYPE_', '').toLowerCase() === 'weekly' ? '每周' : '本周期'}用量` : '用量额度'}
+          {quota
+            ? quota.periodType.replace('USAGE_PERIOD_TYPE_', '').toLowerCase() === 'weekly'
+              ? t('accountMenu.quota.weekly')
+              : t('accountMenu.quota.period')
+            : t('accountMenu.quota.fallback')}
         </span>
         <span className={`account-menu-quota-value is-${quota ? quotaLevel(quota.usedPercent) : 'none'}`}>
-          {quotaLabel(quota, quotaError)}
+          {quotaLabel(quota, quotaError, locale)}
         </span>
         <span className={`quota-bar${quota ? ` is-${quotaLevel(quota.usedPercent)}` : ''}`}>
           <span
@@ -178,6 +223,41 @@ export default function AccountMenu({
           />
         </span>
       </button>
+
+      {/* 语言 */}
+      <button
+        className="account-menu-item"
+        onClick={() => setLangOpen((v) => !v)}
+        role="menuitem"
+        aria-expanded={langOpen}
+      >
+        <IconGlobe size={15} />
+        {t('accountMenu.language')}
+        <span className="account-menu-meta">
+          {localeLabel}
+          <span className="account-menu-caret">{langOpen ? '▾' : '▸'}</span>
+        </span>
+      </button>
+
+      {langOpen && (
+        <div className="account-menu-sub">
+          <button className="account-menu-sub-item" onClick={() => void pickLocale(null)} role="menuitem">
+            <span className="account-menu-sub-check">{rawLocale === null ? '✓' : ''}</span>
+            {t('common.followSystem')}
+          </button>
+          {LOCALE_OPTIONS.map((o) => (
+            <button
+              key={o.value}
+              className="account-menu-sub-item"
+              onClick={() => void pickLocale(o.value)}
+              role="menuitem"
+            >
+              <span className="account-menu-sub-check">{rawLocale === o.value ? '✓' : ''}</span>
+              {o.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       <button
         className="account-menu-item"
@@ -188,7 +268,7 @@ export default function AccountMenu({
         role="menuitem"
       >
         <IconGear size={15} />
-        设置
+        {t('accountMenu.settings')}
       </button>
 
       <div className="account-menu-sep" />
@@ -200,7 +280,7 @@ export default function AccountMenu({
         role="menuitem"
       >
         <IconPower size={15} />
-        {busy ? '退出中…' : '退出登录'}
+        {busy ? t('accountMenu.loggingOut') : t('accountMenu.logout')}
       </button>
     </div>
   )

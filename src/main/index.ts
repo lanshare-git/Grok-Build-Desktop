@@ -6,6 +6,7 @@ import { registerIpc } from './ipc'
 import { registerAssetProtocol } from './assets'
 import { bindAttention } from './attention'
 import { createTray, interceptClose, markQuitting } from './tray'
+import { initLocale } from './i18n'
 
 // Windows 系统通知依赖 AppUserModelId；与 package.json build.appId 保持一致
 app.setAppUserModelId('com.fjh.grokbuild.desktop')
@@ -103,6 +104,8 @@ if (!gotTheLock) {
   })
 
   app.whenReady().then(() => {
+    // 初始化主进程语言（托盘/诊断等主进程文案依赖它），要在 createTray 之前
+    initLocale()
     registerAssetProtocol()
     registerIpc(service)
     createWindow()

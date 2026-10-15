@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 
 import { cleanError } from '../actions'
 import { useStore } from '../store'
+import { useT } from '../i18n'
 import { formatNumber, sessionDisplayTitle } from '../utils'
 import { quotaLevel } from './AccountMenu'
 import type { BillingQuota, GlobalUsageReport, UsageTotals } from '@shared/types'
@@ -27,27 +28,34 @@ function fmtCost(usd: number): string {
 
 /** 一行汇总指标（四格） */
 function StatRow({ totals }: { totals: UsageTotals }): JSX.Element {
+  const t = useT()
   return (
     <div className="usage-stats">
       <div className="usage-stat">
-        <span className="usage-stat-label">输入 token</span>
+        <span className="usage-stat-label">{t('panels.usage.statInput')}</span>
         <span className="usage-stat-value">{formatNumber(totals.inputTokens)}</span>
-        <span className="usage-stat-sub">其中缓存命中 {formatNumber(totals.cachedReadTokens)}</span>
+        <span className="usage-stat-sub">
+          {t('panels.usage.statInputCached', { n: formatNumber(totals.cachedReadTokens) })}
+        </span>
       </div>
       <div className="usage-stat">
-        <span className="usage-stat-label">输出 token</span>
+        <span className="usage-stat-label">{t('panels.usage.statOutput')}</span>
         <span className="usage-stat-value">{formatNumber(totals.outputTokens)}</span>
-        <span className="usage-stat-sub">含推理 {formatNumber(totals.reasoningTokens)}</span>
+        <span className="usage-stat-sub">
+          {t('panels.usage.statOutputReasoning', { n: formatNumber(totals.reasoningTokens) })}
+        </span>
       </div>
       <div className="usage-stat">
-        <span className="usage-stat-label">总 token</span>
+        <span className="usage-stat-label">{t('panels.usage.statTotal')}</span>
         <span className="usage-stat-value">{formatNumber(totals.totalTokens)}</span>
-        <span className="usage-stat-sub">模型调用 {formatNumber(totals.modelCalls)} 次</span>
+        <span className="usage-stat-sub">
+          {t('panels.usage.statModelCalls', { n: formatNumber(totals.modelCalls) })}
+        </span>
       </div>
       <div className="usage-stat is-cost">
-        <span className="usage-stat-label">花费</span>
+        <span className="usage-stat-label">{t('panels.usage.statCost')}</span>
         <span className="usage-stat-value">{fmtCost(totals.costUsd)}</span>
-        <span className="usage-stat-sub">{totals.turnCount} 轮对话</span>
+        <span className="usage-stat-sub">{t('panels.usage.statTurns', { n: totals.turnCount })}</span>
       </div>
     </div>
   )
@@ -63,16 +71,23 @@ function QuotaBlock({
   error: string
   loading: boolean
 }): JSX.Element {
+  const t = useT()
   const level = quota ? quotaLevel(quota.usedPercent) : 'none'
   const periodLabel =
-    quota?.periodType === 'USAGE_PERIOD_TYPE_WEEKLY' ? '每周用量' : quota?.periodType ? '本周期用量' : '用量额度'
+    quota?.periodType === 'USAGE_PERIOD_TYPE_WEEKLY'
+      ? t('panels.usage.quotaPeriodWeekly')
+      : quota?.periodType
+        ? t('panels.usage.quotaPeriodGeneric')
+        : t('panels.usage.quotaFallback')
   const resetIn = (): string => {
     if (!quota?.periodEnd) return ''
     const ms = new Date(quota.periodEnd).getTime() - Date.now()
     if (!Number.isFinite(ms) || ms <= 0) return ''
     const days = Math.floor(ms / 86400000)
     const hours = Math.floor((ms % 86400000) / 3600000)
-    return days > 0 ? `${days} 天 ${hours} 小时后重置` : `${hours} 小时后重置`
+    return days > 0
+      ? t('panels.usage.quotaResetDays', { days, hours })
+      : t('panels.usage.quotaResetHours', { hours })
   }
 
   return (
@@ -80,22 +95,24 @@ function QuotaBlock({
       <div className="settings-row">
         <div className="settings-row-label">
           <span className="settings-row-title">
-            <IconGauge size={13} /> 账号额度
+            <IconGauge size={13} /> {t('panels.usage.quotaTitle')}
           </span>
           <span className="settings-row-desc">
             {quota
-              ? `${quota.periodStart.slice(0, 10)} 至 ${quota.periodEnd.slice(0, 10)}${
-                  resetIn() ? ` · ${resetIn()}` : ''
-                }`
-              : '数据来自 grok 账号服务（等同终端 /usage 的 Usage limit 页）'}
+              ? t('panels.usage.quotaRange', {
+                  start: quota.periodStart.slice(0, 10),
+                  end: quota.periodEnd.slice(0, 10),
+                  reset: resetIn()
+                })
+              : t('panels.usage.quotaDescFallback')}
           </span>
         </div>
       </div>
 
-      {loading && <div className="usage-loading">正在读取额度…</div>}
+      {loading && <div className="usage-loading">{t('panels.usage.quotaLoading')}</div>}
       {!loading && !quota && (
         <div className="usage-empty">
-          额度信息暂不可用{error ? `（${error}）` : ''}。未登录或网络不通时读不到；代理需在「环境自检」里可用。
+          {t('panels.usage.quotaUnavailable', { error })}
         </div>
       )}
 
@@ -104,12 +121,16 @@ function QuotaBlock({
           <div className={`quota-hero is-${level}`}>
             <div className="quota-hero-left">
               <div className="quota-hero-value">{quota.usedPercent.toFixed(0)}%</div>
-              <div className="quota-hero-label">{periodLabel}已用</div>
+              <div className="quota-hero-label">{t('panels.usage.quotaUsed', { period: periodLabel })}</div>
             </div>
             <div className="quota-hero-right">
-              <div className="quota-hero-remaining">剩余 {quota.remainingPercent.toFixed(0)}%</div>
+              <div className="quota-hero-remaining">
+                {t('panels.usage.quotaRemaining', { percent: quota.remainingPercent.toFixed(0) })}
+              </div>
               {quota.prepaidBalance > 0 && (
-                <div className="quota-hero-sub">预付余额 {quota.prepaidBalance}</div>
+                <div className="quota-hero-sub">
+                  {t('panels.usage.quotaPrepaid', { balance: quota.prepaidBalance })}
+                </div>
               )}
             </div>
           </div>
@@ -140,25 +161,26 @@ function QuotaBlock({
 }
 
 function ModelTable({ rows }: { rows: Array<{ modelId: string } & UsageTotals> }): JSX.Element | null {
+  const t = useT()
   if (rows.length === 0) return null
   return (
     <div className="settings-group">
       <div className="settings-row">
         <div className="settings-row-label">
-          <span className="settings-row-title">按模型</span>
-          <span className="settings-row-desc">跨全部会话累计</span>
+          <span className="settings-row-title">{t('panels.usage.byModelTitle')}</span>
+          <span className="settings-row-desc">{t('panels.usage.byModelDesc')}</span>
         </div>
       </div>
       <div className="usage-table-scroll">
         <table className="usage-table">
           <thead>
             <tr>
-              <th>模型</th>
-              <th className="num">输入</th>
-              <th className="num">输出</th>
-              <th className="num">总 token</th>
-              <th className="num">调用</th>
-              <th className="num">花费</th>
+              <th>{t('panels.usage.colModel')}</th>
+              <th className="num">{t('panels.usage.colInput')}</th>
+              <th className="num">{t('panels.usage.colOutput')}</th>
+              <th className="num">{t('panels.usage.colTotal')}</th>
+              <th className="num">{t('panels.usage.colCalls')}</th>
+              <th className="num">{t('panels.usage.colCost')}</th>
             </tr>
           </thead>
           <tbody>
@@ -180,7 +202,9 @@ function ModelTable({ rows }: { rows: Array<{ modelId: string } & UsageTotals> }
 }
 
 export default function UsagePanel(): JSX.Element {
+  const t = useT()
   const sessions = useStore((s) => s.sessions)
+  const locale = useStore((s) => s.locale)
 
   const [quota, setQuota] = useState<BillingQuota | null>(null)
   const [quotaError, setQuotaError] = useState('')
@@ -196,9 +220,9 @@ export default function UsagePanel(): JSX.Element {
         window.grok.usageAggregate(
           sessions
             .filter((s) => !s.isDraft)
-            .map((s) => ({ sessionId: s.id, cwd: s.cwd, title: sessionDisplayTitle(s) }))
+            .map((s) => ({ sessionId: s.id, cwd: s.cwd, title: sessionDisplayTitle(s, locale) }))
         ),
-        window.grok.billingQuota(true).catch(() => ({ quota: null, error: '额度暂不可用' }))
+        window.grok.billingQuota(true).catch(() => ({ quota: null, error: t('panels.usage.quotaErrorFallback') }))
       ])
       setGlobal(all)
       setQuota(quotaRes.quota)
@@ -217,10 +241,8 @@ export default function UsagePanel(): JSX.Element {
 
   return (
     <div className="settings-page">
-      <div className="settings-page-title">用量</div>
-      <div className="settings-page-sub">
-        全局口径：账号额度 + 全部会话累计。单个会话的逐轮明细见右上角「用量」入口。
-      </div>
+      <div className="settings-page-title">{t('panels.usage.title')}</div>
+      <div className="settings-page-sub">{t('panels.usage.subtitle')}</div>
 
       {error && <div className="mcp-form-error">{error}</div>}
 
@@ -229,24 +251,22 @@ export default function UsagePanel(): JSX.Element {
       <div className="settings-group">
         <div className="settings-row">
           <div className="settings-row-label">
-            <span className="settings-row-title">全部会话累计</span>
+            <span className="settings-row-title">{t('panels.usage.totalTitle')}</span>
             <span className="settings-row-desc">
               {global
-                ? `覆盖 ${global.sessionCount} 个会话${
-                    global.missingCount > 0 ? `，${global.missingCount} 个无用量记录` : ''
-                  }`
-                : '正在统计…'}
+                ? t('panels.usage.totalDesc', { count: global.sessionCount, missing: global.missingCount })
+                : t('panels.usage.totalDescLoading')}
             </span>
           </div>
           <button className="btn btn-ghost" disabled={loading} onClick={() => void load()}>
             <IconRefresh size={13} />
-            刷新
+            {t('panels.usage.refresh')}
           </button>
         </div>
         {global ? (
           <StatRow totals={global.totals} />
         ) : (
-          !loading && <div className="usage-empty">暂无可统计的用量记录。</div>
+          !loading && <div className="usage-empty">{t('panels.usage.totalEmpty')}</div>
         )}
       </div>
 
@@ -256,18 +276,20 @@ export default function UsagePanel(): JSX.Element {
         <div className="settings-group">
           <div className="settings-row">
             <div className="settings-row-label">
-              <span className="settings-row-title">花销最高的会话</span>
-              <span className="settings-row-desc">前 {global.topSessions.length} 名</span>
+              <span className="settings-row-title">{t('panels.usage.topTitle')}</span>
+              <span className="settings-row-desc">
+                {t('panels.usage.topDesc', { n: global.topSessions.length })}
+              </span>
             </div>
           </div>
           <div className="usage-table-scroll">
             <table className="usage-table">
               <thead>
                 <tr>
-                  <th>会话</th>
-                  <th className="num">轮数</th>
-                  <th className="num">总 token</th>
-                  <th className="num">花费</th>
+                  <th>{t('panels.usage.colSession')}</th>
+                  <th className="num">{t('panels.usage.colTurns')}</th>
+                  <th className="num">{t('panels.usage.colTotal')}</th>
+                  <th className="num">{t('panels.usage.colCost')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -288,9 +310,7 @@ export default function UsagePanel(): JSX.Element {
         </div>
       )}
 
-      <div className="mcp-hint">
-        额度由 xAI 账号侧统计，与 token 计费口径相互独立：额度决定「还能用多少」，计费明细是「已经用了多少」。
-      </div>
+      <div className="mcp-hint">{t('panels.usage.footnote')}</div>
     </div>
   )
 }

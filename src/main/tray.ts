@@ -16,9 +16,11 @@ import { app, BrowserWindow, Menu, Tray, nativeImage } from 'electron'
 import { join } from 'node:path'
 import type { Event as ElectronEvent } from 'electron'
 import { readConfig } from './config'
+import { t } from './i18n'
 import type { AgentService } from './acp/service'
 import { CH } from '../shared/channels'
 import type { ConnectionState } from '../shared/types'
+import type { MessageKey } from '../shared/i18n'
 
 type TrayState = 'ok' | 'attention' | 'error'
 
@@ -31,18 +33,21 @@ const STATE_MAP: Record<ConnectionState, TrayState> = {
   stopped: 'attention'
 }
 
-const STATE_LABEL: Record<ConnectionState, string> = {
-  ready: '已连接',
-  starting: '连接中',
-  idle: '未连接',
-  stopped: '已断开',
-  error: '连接错误'
+const STATE_LABEL_KEY: Record<ConnectionState, MessageKey> = {
+  ready: 'tray.state.ready',
+  starting: 'tray.state.starting',
+  idle: 'tray.state.idle',
+  stopped: 'tray.state.stopped',
+  error: 'tray.state.error'
 }
 
 let tray: Tray | null = null
 let win: BrowserWindow | null = null
 let quitting = false
 let balloonShown = false
+/** 最近一次托盘状态与附加消息，语言切换时据此重建菜单 */
+let lastState: ConnectionState = 'starting'
+let lastMessage = ''
 
 function trayIconPath(state: TrayState): string {
   return app.isPackaged
@@ -61,13 +66,13 @@ function rebuildMenu(state: ConnectionState, message: string): void {
   if (!tray) return
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: `连接状态：${STATE_LABEL[state]}`, enabled: false },
+      { label: t('tray.statusLine', { state: t(STATE_LABEL_KEY[state]) }), enabled: false },
       ...(message ? [{ label: message, enabled: false }] : []),
       { type: 'separator' },
-      { label: '显示主窗口', click: showWindow },
+      { label: t('tray.showWindow'), click: showWindow },
       { type: 'separator' },
       {
-        label: '退出',
+        label: t('tray.quit'),
         click: () => {
           quitting = true
           app.quit()
@@ -80,16 +85,25 @@ function rebuildMenu(state: ConnectionState, message: string): void {
 export function createTray(mainWindow: BrowserWindow, service: AgentService): void {
   win = mainWindow
   tray = new Tray(trayIconPath('attention'))
-  tray.setToolTip('Grok Build Desktop 启动中…')
+  tray.setToolTip(t('tray.startingTip'))
   rebuildMenu('starting', '')
   tray.on('click', showWindow)
 
   service.on('state', ({ state, message }) => {
     if (!tray) return
+    lastState = state
+    lastMessage = message ?? ''
     tray.setImage(nativeImage.createFromPath(trayIconPath(STATE_MAP[state])))
-    tray.setToolTip(`Grok Build Desktop · ${STATE_LABEL[state]}`)
+    tray.setToolTip(`Grok Build Desktop · ${t(STATE_LABEL_KEY[state])}`)
     rebuildMenu(state, message ?? '')
   })
+}
+
+/** 语言切换后按最近状态重建 tooltip 与右键菜单 */
+export function refreshTrayLocale(): void {
+  if (!tray) return
+  tray.setToolTip(`Grok Build Desktop · ${t(STATE_LABEL_KEY[lastState])}`)
+  rebuildMenu(lastState, lastMessage)
 }
 
 /** 隐藏窗口到托盘（不退出），首次弹气泡提示 */
@@ -98,7 +112,7 @@ function hideToTray(): void {
   if (!balloonShown && tray && process.platform === 'win32') {
     tray.displayBalloon({
       title: 'Grok Build Desktop',
-      content: '应用已最小化到系统托盘，点击托盘图标可重新打开。'
+      content: t('tray.balloon')
     })
     balloonShown = true
   }

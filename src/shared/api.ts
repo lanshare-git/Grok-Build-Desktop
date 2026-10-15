@@ -1,5 +1,6 @@
 /** 渲染进程可见的 API 契约（由 preload 通过 contextBridge 暴露） */
 
+import type { Locale } from './i18n/types'
 import type {
   AcpStreamEvent,
   AgentMetaEvent,
@@ -52,6 +53,12 @@ export interface AppInfo {
   grokBinary: string | null
   /** 首次启动时的默认工作目录 */
   defaultCwd: string
+}
+
+/** 语言设置：raw = 用户显式选择（null = 跟随系统），resolved = 归一后实际生效的语言 */
+export interface LocaleSetting {
+  raw: Locale | null
+  resolved: Locale
 }
 
 export interface GrokDesktopApi {
@@ -260,6 +267,12 @@ export interface GrokDesktopApi {
   /** 写入行为；传 null 表示「每次询问」 */
   setCloseAction(action: CloseAction | null): Promise<void>
 
+  /* 界面语言 */
+  /** 读取语言设置：raw = 用户显式选择（null = 跟随系统），resolved = 归一后实际生效值 */
+  getLocale(): Promise<LocaleSetting>
+  /** 写入语言；传 null 表示跟随系统。返回最新的 raw + resolved */
+  setLocale(locale: Locale | null): Promise<LocaleSetting>
+
   /* 删除会话的默认行为配置 */
   /** 读取删除确认弹窗里「同时删除磁盘文件」是否默认勾选（默认 true） */
   getDeletePurgeDefault(): Promise<boolean>
@@ -288,4 +301,6 @@ export interface GrokDesktopApi {
   onMeta(cb: (meta: AgentMetaEvent) => void): () => void
   /** 系统通知被点击：切到对应会话处理待授权/提问 */
   onFocusSession(cb: (event: { sessionId: string }) => void): () => void
+  /** 语言切换广播（任一入口切换后，所有窗口同步） */
+  onLocaleChanged(cb: (locale: Locale) => void): () => void
 }

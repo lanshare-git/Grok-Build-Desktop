@@ -89,6 +89,10 @@ export const CH = {
   closeActionGet: 'config:close-action-get',
   closeActionSet: 'config:close-action-set',
 
+  /* 界面语言（locale） */
+  localeGet: 'config:locale-get',
+  localeSet: 'config:locale-set',
+
   /* 删除确认弹窗的默认值：是否默认勾选「同时删除磁盘文件」 */
   deletePurgeDefaultGet: 'config:delete-purge-default-get',
   deletePurgeDefaultSet: 'config:delete-purge-default-set',
@@ -112,5 +116,7 @@ export const CH = {
   /** agent 上报的内置命令（initialize）与公告（announcements/update） */
   pushMeta: 'push:meta',
   /** 系统通知被点击：请渲染层切到该会话去处理待授权/提问 */
-  pushFocusSession: 'push:focus-session'
+  pushFocusSession: 'push:focus-session',
+  /** 语言切换后广播给所有窗口（payload 为归一后的 Locale） */
+  localeChanged: 'push:locale-changed'
 } as const

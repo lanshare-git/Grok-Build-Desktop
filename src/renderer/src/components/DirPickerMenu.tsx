@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 import { chooseCwd, newSession } from '../actions'
+import { useT } from '../i18n'
 import { useStore } from '../store'
 import { groupSessionsByWorkspace } from '../utils'
 import { IconFolder } from './Icons'
@@ -21,11 +22,13 @@ export default function DirPickerMenu({
   const sessions = useStore((s) => s.sessions)
   const workspaces = useStore((s) => s.workspaces)
   const homeDir = useStore((s) => s.homeDir)
+  const t = useT()
+  const locale = useStore((s) => s.locale)
 
   const menuRef = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
 
-  const groups = groupSessionsByWorkspace(sessions, workspaces, homeDir)
+  const groups = groupSessionsByWorkspace(sessions, workspaces, homeDir, locale)
     .filter((g) => !g.isHome)
     .sort((a, b) => b.latest - a.latest)
 
@@ -80,9 +83,9 @@ export default function DirPickerMenu({
 
   return (
     <div className="dir-menu" ref={menuRef} style={{ left: pos.left, top: pos.top }} role="menu">
-      <div className="dir-menu-head">选择工作目录</div>
+      <div className="dir-menu-head">{t('sessionTools.dir.title')}</div>
       <div className="dir-menu-list">
-        {groups.length === 0 && <div className="dir-menu-empty">暂无最近目录，请添加工作目录</div>}
+        {groups.length === 0 && <div className="dir-menu-empty">{t('sessionTools.dir.empty')}</div>}
         {groups.map((g) => (
           <button
             key={g.key}
@@ -100,7 +103,7 @@ export default function DirPickerMenu({
       <div className="dir-menu-sep" />
       <button className="dir-menu-item" role="menuitem" onClick={() => void browse()}>
         <IconFolder size={14} />
-        <span className="dir-menu-label">添加工作目录…</span>
+        <span className="dir-menu-label">{t('sessionTools.dir.browse')}</span>
       </button>
     </div>
   )

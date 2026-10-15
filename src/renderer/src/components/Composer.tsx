@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react'
 
 import { cancelCurrent, newSessionInWorktree, sendPrompt } from '../actions'
+import { useT, type MessageKey } from '../i18n'
 import { useStore } from '../store'
 import ConfirmDialog from './ConfirmDialog'
 import type { ConfirmSpec } from './ConfirmDialog'
@@ -35,16 +36,17 @@ const VIDEO_MODELS = ['grok-imagine-video-1.5', 'grok-imagine-video-1.5-lite', '
  *  - agent 握手时的 availableCommands（compact / context / deep-research / workflow …）
  *  - `grok inspect` 的内置技能（/imagine / /learn / /review / /pptx / /pdf …）
  */
-const SEED_COMMANDS: AvailableCommand[] = [
+const seedCommands = (t: (key: MessageKey) => string): AvailableCommand[] => [
   { name: '/imagine', description: 'Generate an image from a text description' },
   { name: '/imagine-video', description: 'Generate a video from a text description' },
   {
     name: '/worktree',
-    description: '在独立的 git worktree 副本中新建任务（等价终端 grok -w），与主仓库互不干扰'
+    description: t('composer.seedWorktreeDesc')
   }
 ]
 
 export default function Composer(): JSX.Element {
+  const t = useT()
   const [text, setText] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -95,21 +97,22 @@ export default function Composer(): JSX.Element {
   const askWorktree = (): void => {
     if (!cwd) return
     setWtConfirm({
-      title: '在 worktree 中新建任务？',
+      title: t('composer.worktreeConfirmTitle'),
       message: (
         <>
-          将基于 <strong>{cwd}</strong> 创建一份独立的 git worktree，并在其中开新任务。
+          {t('composer.worktreeConfirmPre')}
+          <strong>{cwd}</strong>
+          {t('composer.worktreeConfirmPost')}
         </>
       ),
-      detail:
-        '与主仓库的改动互不干扰（worktree 名由 grok 自动生成）。目标目录需要是 git 仓库。清单与清理在「设置 → Worktree」。',
-      confirmText: '创建并新建',
-      cancelText: '取消',
+      detail: t('composer.worktreeConfirmDetail'),
+      confirmText: t('composer.worktreeConfirmOk'),
+      cancelText: t('common.cancel'),
       onConfirm: () => {
         void (async () => {
           const res = await newSessionInWorktree({ cwd })
-          if (res.ok) flashWt(`已在 worktree 中新建任务：${res.path}`)
-          else flashWt(`创建 worktree 失败：${res.message ?? '未知错误'}`)
+          if (res.ok) flashWt(t('composer.worktreeCreated', { path: res.path ?? '' }))
+          else flashWt(t('composer.worktreeFailed', { message: res.message ?? '' }))
         })()
       }
     })
@@ -118,7 +121,7 @@ export default function Composer(): JSX.Element {
   // 命令补全：种子 ∪ 会话级上报 ∪ agent 内置命令 ∪ grok 内置技能
   const allCommands = useMemo<AvailableCommand[]>(() => {
     const map = new Map<string, AvailableCommand>()
-    for (const c of SEED_COMMANDS) map.set(c.name, c)
+    for (const c of seedCommands(t)) map.set(c.name, c)
     for (const c of commands) if (c.name) map.set(c.name, { ...map.get(c.name), ...c })
     for (const c of builtinCommands) if (c?.name) map.set(c.name, { ...map.get(c.name), ...c })
     for (const s of skillCommands ?? []) {
@@ -128,7 +131,7 @@ export default function Composer(): JSX.Element {
       map.set(name, { name, description: s.description })
     }
     return [...map.values()].sort((a, b) => a.name.localeCompare(b.name))
-  }, [commands, builtinCommands, skillCommands])
+  }, [commands, builtinCommands, skillCommands, t])
 
   // 是否正在输入「/命令」（还没敲空格），用于弹出补全
   const slashQuery = /^\/(\S*)$/.exec(text)?.[1]?.toLowerCase() ?? null
@@ -205,7 +208,7 @@ export default function Composer(): JSX.Element {
       const base64 = dataUrl.slice(dataUrl.indexOf(',') + 1)
       setAttachments((prev) => [
         ...prev,
-        { id: uid(), data: base64, mimeType: blob.type, name: name ?? '图片', preview: dataUrl }
+        { id: uid(), data: base64, mimeType: blob.type, name: name ?? t('composer.imageFallback'), preview: dataUrl }
       ])
     }
     void reader.readAsDataURL(blob)
@@ -219,7 +222,7 @@ export default function Composer(): JSX.Element {
       .filter((f): f is File => f !== null)
     if (files.length > 0) {
       e.preventDefault()
-      files.forEach((f) => addImageBlob(f, f.name || '剪贴板图片'))
+      files.forEach((f) => addImageBlob(f, f.name || t('composer.clipboardImage')))
     }
   }
 
@@ -337,7 +340,7 @@ export default function Composer(): JSX.Element {
               <img src={a.preview} alt={a.name} />
               <button
                 className="attach-remove"
-                title="移除"
+                title={t('composer.removeAttachment')}
                 onClick={() => removeAttachment(a.id)}
               >
                 <IconClose size={11} />
@@ -361,8 +364,8 @@ export default function Composer(): JSX.Element {
               }}
             >
               <IconImage size={14} />
-              <span className="menu-label">上传图片</span>
-              <span className="menu-desc">发送前可在输入框上方预览</span>
+              <span className="menu-label">{t('composer.uploadImage')}</span>
+              <span className="menu-desc">{t('composer.uploadImageDesc')}</span>
             </button>
             <button
               type="button"
@@ -374,8 +377,8 @@ export default function Composer(): JSX.Element {
               }}
             >
               <IconScissors size={14} />
-              <span className="menu-label">截图提问</span>
-              <span className="menu-desc">截完在输入框 Ctrl+V 粘贴</span>
+              <span className="menu-label">{t('composer.screenshot')}</span>
+              <span className="menu-desc">{t('composer.screenshotDesc')}</span>
             </button>
             <button
               type="button"
@@ -387,15 +390,15 @@ export default function Composer(): JSX.Element {
               }}
             >
               <IconBox size={14} />
-              <span className="menu-label">在 worktree 中新建任务</span>
-              <span className="menu-desc">独立代码副本 · 等价 grok -w</span>
+              <span className="menu-label">{t('composer.worktreeMenu')}</span>
+              <span className="menu-desc">{t('composer.worktreeMenuDesc')}</span>
             </button>
           </div>
         )}
         <div className="composer-tools" ref={toolsRef}>
           <button
             className={`tool-btn${menuOpen ? ' is-open' : ''}`}
-            title="添加图片、截图，或在 worktree 中新建任务"
+            title={t('composer.toolMenuTitle')}
             aria-haspopup="menu"
             aria-expanded={menuOpen}
             onClick={() => setMenuOpen((v) => !v)}
@@ -415,7 +418,7 @@ export default function Composer(): JSX.Element {
           ref={textareaRef}
           className="composer-input"
           rows={1}
-          placeholder="描述任务，或粘贴截图提问…（Enter 发送，Shift+Enter 换行）"
+          placeholder={t('composer.placeholder')}
           value={text}
           onChange={(e) => {
             setText(e.target.value)
@@ -428,7 +431,7 @@ export default function Composer(): JSX.Element {
         />
         {/* 响应中：stop 与 send **并存** —— 想打断点 stop，想补充点 send（排队） */}
         {running && (
-          <button className="btn btn-stop" onClick={cancelCurrent} title="中断当前回合">
+          <button className="btn btn-stop" onClick={cancelCurrent} title={t('composer.stop')}>
             <IconStop size={15} />
           </button>
         )}
@@ -449,7 +452,7 @@ export default function Composer(): JSX.Element {
       {isImagineVideo && (
         <div className="imagine-params">
           <div className="param-row">
-            <span className="param-label">时长</span>
+            <span className="param-label">{t('composer.duration')}</span>
             {VIDEO_DURATIONS.map((d) => (
               <button
                 key={d}
@@ -462,7 +465,7 @@ export default function Composer(): JSX.Element {
             ))}
           </div>
           <div className="param-row">
-            <span className="param-label">宽高比</span>
+            <span className="param-label">{t('composer.ratio')}</span>
             {VIDEO_RATIOS.map((r) => (
               <button
                 key={r}
@@ -475,7 +478,7 @@ export default function Composer(): JSX.Element {
             ))}
           </div>
           <div className="param-row">
-            <span className="param-label">分辨率</span>
+            <span className="param-label">{t('composer.resolution')}</span>
             {VIDEO_RESOLUTIONS.map((r) => (
               <button
                 key={r}
@@ -488,7 +491,7 @@ export default function Composer(): JSX.Element {
             ))}
           </div>
           <div className="param-row">
-            <span className="param-label">模型</span>
+            <span className="param-label">{t('composer.model')}</span>
             {VIDEO_MODELS.map((m) => (
               <button
                 key={m}
@@ -506,7 +509,7 @@ export default function Composer(): JSX.Element {
               checked={includeParams}
               onChange={(e) => setIncludeParams(e.target.checked)}
             />
-            发送时附带参数（关闭则只发提示词，参数需自行补充在框内）
+            {t('composer.includeParams')}
           </label>
         </div>
       )}

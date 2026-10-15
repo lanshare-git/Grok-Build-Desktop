@@ -12,6 +12,7 @@ import {
   setToolCallDensity
 } from '../actions'
 import { useStore } from '../store'
+import { LOCALE_OPTIONS, useT, type Locale, type MessageKey } from '../i18n'
 import type { SettingsSection } from '../store'
 import type { CloseAction, ToolCallDensity } from '@shared/types'
 import { DENSITY_OPTIONS } from '@shared/types'
@@ -46,22 +47,23 @@ import {
 
 const SECTIONS: Array<{
   id: SettingsSection
-  label: string
+  labelKey: MessageKey
   icon: (props: { size?: number }) => JSX.Element
 }> = [
-  { id: 'general', label: '通用', icon: IconGear },
-  { id: 'account', label: '账号', icon: IconUser },
-  { id: 'usage', label: '用量', icon: IconGauge },
-  { id: 'mcp', label: 'MCP 服务', icon: IconPlug },
-  { id: 'plugins', label: '插件', icon: IconPlug },
-  { id: 'disk', label: '存储占用', icon: IconBox },
-  { id: 'worktree', label: 'Worktree', icon: IconFolder },
-  { id: 'version', label: '版本与更新', icon: IconDownload },
-  { id: 'diagnostics', label: '环境自检', icon: IconPulse },
-  { id: 'about', label: '关于', icon: IconInfo }
+  { id: 'general', labelKey: 'settings.nav.general', icon: IconGear },
+  { id: 'account', labelKey: 'settings.nav.account', icon: IconUser },
+  { id: 'usage', labelKey: 'settings.nav.usage', icon: IconGauge },
+  { id: 'mcp', labelKey: 'settings.nav.mcp', icon: IconPlug },
+  { id: 'plugins', labelKey: 'settings.nav.plugins', icon: IconPlug },
+  { id: 'disk', labelKey: 'settings.nav.disk', icon: IconBox },
+  { id: 'worktree', labelKey: 'settings.nav.worktree', icon: IconFolder },
+  { id: 'version', labelKey: 'settings.nav.version', icon: IconDownload },
+  { id: 'diagnostics', labelKey: 'settings.nav.diagnostics', icon: IconPulse },
+  { id: 'about', labelKey: 'settings.nav.about', icon: IconInfo }
 ]
 
 export default function SettingsDialog(): JSX.Element | null {
+  const t = useT()
   const section = useStore((s) => s.settingsSection)
   const setSection = useStore((s) => s.setSettingsSection)
 
@@ -91,15 +93,15 @@ export default function SettingsDialog(): JSX.Element | null {
         onClick={(e) => e.stopPropagation()}
       >
         <aside className="settings-nav">
-          <div className="settings-nav-title">设置</div>
-          {SECTIONS.map(({ id, label, icon: Icon }) => (
+          <div className="settings-nav-title">{t('settings.title')}</div>
+          {SECTIONS.map(({ id, labelKey, icon: Icon }) => (
             <button
               key={id}
               className={`settings-nav-item${section === id ? ' is-active' : ''}`}
               onClick={() => setSection(id)}
             >
               <Icon size={15} />
-              {label}
+              {t(labelKey)}
             </button>
           ))}
         </aside>
@@ -109,7 +111,7 @@ export default function SettingsDialog(): JSX.Element | null {
             <button
               className="icon-btn settings-close"
               onClick={() => setSection(null)}
-              title="关闭 (Esc)"
+              title={t('settings.close')}
             >
               <IconClose size={16} />
             </button>
@@ -136,6 +138,7 @@ export default function SettingsDialog(): JSX.Element | null {
  *  通用分区：关闭行为（原先放在「关于」面板里，收敛到统一的「通用」）
  * ------------------------------------------------------------------ */
 function GeneralSettings(): JSX.Element {
+  const t = useT()
   const [closeAction, setCloseActionState] = useState<CloseAction | null>(null)
   /** 删除弹窗里「同时删除磁盘文件」是否默认勾选（默认 true，与历史行为一致） */
   const [purgeDefault, setPurgeDefaultState] = useState(true)
@@ -157,70 +160,122 @@ function GeneralSettings(): JSX.Element {
 
   return (
     <div className="settings-page">
-      <div className="settings-page-title">通用</div>
-      <div className="settings-page-sub">应用的基础行为</div>
+      <div className="settings-page-title">{t('settings.general.title')}</div>
+      <div className="settings-page-sub">{t('settings.general.subtitle')}</div>
+
+      {/* 界面语言：三语切换，默认跟随系统 */}
+      <LanguageSetting />
 
       <div className="settings-group">
         <div className="settings-row">
           <div className="settings-row-label">
-            <span className="settings-row-title">关闭时</span>
-            <span className="settings-row-desc">点击窗口右上角关闭按钮时的行为</span>
+            <span className="settings-row-title">{t('settings.general.closeAction.title')}</span>
+            <span className="settings-row-desc">{t('settings.general.closeAction.desc')}</span>
           </div>
           <div className="close-action-setting is-seg">
             <button
               className={`seg ${closeAction === 'tray' ? 'is-active' : ''}`}
               onClick={() => void choose('tray')}
             >
-              隐藏到托盘
+              {t('settings.general.closeAction.tray')}
             </button>
             <button
               className={`seg ${closeAction === 'quit' ? 'is-active' : ''}`}
               onClick={() => void choose('quit')}
             >
-              直接退出
+              {t('settings.general.closeAction.quit')}
             </button>
             <button
               className={`seg ${closeAction === null ? 'is-active' : ''}`}
               onClick={() => void choose(null)}
             >
-              每次询问
+              {t('settings.general.closeAction.ask')}
             </button>
           </div>
         </div>
-        <div className="mcp-hint">
-          选「每次询问」后，下次点击关闭会再次弹出询问窗口；其余选项会记住你的选择。
-        </div>
+        <div className="mcp-hint">{t('settings.general.closeAction.hint')}</div>
       </div>
 
       {/* 删除会话：删除确认弹窗里「同时删除磁盘上的会话文件」的默认勾选状态 */}
       <div className="settings-group">
         <div className="settings-row">
           <div className="settings-row-label">
-            <span className="settings-row-title">删除会话时</span>
-            <span className="settings-row-desc">是否默认连磁盘文件一起删</span>
+            <span className="settings-row-title">{t('settings.general.purge.title')}</span>
+            <span className="settings-row-desc">{t('settings.general.purge.desc')}</span>
           </div>
           <div className="close-action-setting is-seg">
             <button
               className={`seg ${purgeDefault ? 'is-active' : ''}`}
               onClick={() => void choosePurge(true)}
             >
-              默认勾选
+              {t('settings.general.purge.on')}
             </button>
             <button
               className={`seg ${!purgeDefault ? 'is-active' : ''}`}
               onClick={() => void choosePurge(false)}
             >
-              默认不勾
+              {t('settings.general.purge.off')}
             </button>
           </div>
         </div>
-        <div className="mcp-hint">
-          对应删除确认弹窗里的「同时删除磁盘上的会话文件」复选框：勾选会一并删掉该会话的磁盘数据（先送系统回收站，不可用时移入应用内回收站，仍可找回）；默认不勾时，弹窗只把会话从列表移除，要连磁盘一起删需在弹窗里自己勾上。
-        </div>
+        <div className="mcp-hint">{t('settings.general.purge.hint')}</div>
       </div>
 
       {/* 工具调用展示密度：与终端 /density 共用 config.toml 的 ui.tool_call_density */}
       <DensitySetting />
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ *
+ *  界面语言：raw（null = 跟随系统）决定选中态；切换后主进程广播给所有窗口
+ * ------------------------------------------------------------------ */
+function LanguageSetting(): JSX.Element {
+  const t = useT()
+  /** undefined = 尚未从主进程取回（此时不高亮任何选项） */
+  const [raw, setRaw] = useState<Locale | null | undefined>(undefined)
+
+  useEffect(() => {
+    let alive = true
+    void window.grok.getLocale().then((res) => {
+      if (alive) setRaw(res.raw)
+    })
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  const choose = async (value: Locale | null): Promise<void> => {
+    const picked = await window.grok.setLocale(value)
+    useStore.getState().setLocale(picked.resolved)
+    setRaw(picked.raw)
+  }
+
+  return (
+    <div className="settings-group">
+      <div className="settings-row">
+        <div className="settings-row-label">
+          <span className="settings-row-title">{t('settings.general.language.title')}</span>
+          <span className="settings-row-desc">{t('settings.general.language.desc')}</span>
+        </div>
+        <div className="close-action-setting is-seg">
+          <button
+            className={`seg ${raw === null ? 'is-active' : ''}`}
+            onClick={() => void choose(null)}
+          >
+            {t('common.followSystem')}
+          </button>
+          {LOCALE_OPTIONS.map((o) => (
+            <button
+              key={o.value}
+              className={`seg ${raw === o.value ? 'is-active' : ''}`}
+              onClick={() => void choose(o.value)}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
@@ -231,12 +286,13 @@ function GeneralSettings(): JSX.Element {
  *  此处退出登录会一并清掉终端版的凭据。
  * ------------------------------------------------------------------ */
 function AccountSettings(): JSX.Element {
+  const t = useT()
   const account = useStore((s) => s.account)
   const [busy, setBusy] = useState(false)
   const [loginNote, setLoginNote] = useState<string | null>(null)
 
   const displayName =
-    [account?.firstName, account?.lastName].filter(Boolean).join(' ') || account?.email || '未登录'
+    [account?.firstName, account?.lastName].filter(Boolean).join(' ') || account?.email || t('settings.account.notLoggedIn')
 
   const onLogin = async (): Promise<void> => {
     if (busy) return
@@ -247,7 +303,7 @@ function AccountSettings(): JSX.Element {
       setLoginNote(text)
       await refreshAccount()
     } catch (err) {
-      setLoginNote(`登录失败：${err instanceof Error ? err.message : String(err)}`)
+      setLoginNote(t('settings.account.loginFailed', { message: err instanceof Error ? err.message : String(err) }))
     } finally {
       setBusy(false)
     }
@@ -265,17 +321,15 @@ function AccountSettings(): JSX.Element {
 
   return (
     <div className="settings-page">
-      <div className="settings-page-title">账号</div>
-      <div className="settings-page-sub">
-        桌面端与终端版 Grok 共用同一份登录态（~/.grok/auth.json），退出将同时清掉终端版凭据。
-      </div>
+      <div className="settings-page-title">{t('settings.account.title')}</div>
+      <div className="settings-page-sub">{t('settings.account.subtitle')}</div>
 
       {account ? (
         <div className="settings-group">
           <div className="settings-row">
             <div className="settings-row-label">
-              <span className="settings-row-title">当前账号</span>
-              <span className="settings-row-desc">登录邮箱与姓名</span>
+              <span className="settings-row-title">{t('settings.account.current')}</span>
+              <span className="settings-row-desc">{t('settings.account.currentDesc')}</span>
             </div>
             <div className="account-identity">
               <span className="account-name">{displayName}</span>
@@ -285,16 +339,16 @@ function AccountSettings(): JSX.Element {
           {account.teamId && (
             <div className="settings-row">
               <div className="settings-row-label">
-                <span className="settings-row-title">团队</span>
-                <span className="settings-row-desc">当前账号所属的团队标识</span>
+                <span className="settings-row-title">{t('settings.account.team')}</span>
+                <span className="settings-row-desc">{t('settings.account.teamDesc')}</span>
               </div>
               <code className="account-mono">{account.teamId}</code>
             </div>
           )}
           <div className="settings-row">
             <div className="settings-row-label">
-              <span className="settings-row-title">鉴权方式</span>
-              <span className="settings-row-desc">登录时使用的认证类型</span>
+              <span className="settings-row-title">{t('settings.account.authMode')}</span>
+              <span className="settings-row-desc">{t('settings.account.authModeDesc')}</span>
             </div>
             <code className="account-mono">{account.authMode ?? '—'}</code>
           </div>
@@ -303,10 +357,10 @@ function AccountSettings(): JSX.Element {
         <div className="settings-group">
           <div className="settings-row">
             <div className="settings-row-label">
-              <span className="settings-row-title">当前账号</span>
-              <span className="settings-row-desc">尚未登录或登录态已失效</span>
+              <span className="settings-row-title">{t('settings.account.current')}</span>
+              <span className="settings-row-desc">{t('settings.account.currentEmptyDesc')}</span>
             </div>
-            <span className="account-empty">未登录</span>
+            <span className="account-empty">{t('settings.account.notLoggedIn')}</span>
           </div>
         </div>
       )}
@@ -314,13 +368,11 @@ function AccountSettings(): JSX.Element {
       <div className="modal-actions" style={{ padding: 0 }}>
         <span className="modal-actions-spacer" />
         <button className="btn btn-danger" disabled={busy || !account} onClick={() => void onLogout()}>
-          {busy ? '退出中…' : '退出登录'}
+          {busy ? t('settings.account.loggingOut') : t('settings.account.logout')}
         </button>
       </div>
 
-      <div className="about-hint">
-        退出后将清除本地缓存的凭据并重启 agent；如需再次使用，请重新登录（终端执行 <code>grok login</code>）。
-      </div>
+      <div className="about-hint">{t('settings.account.logoutHint')}</div>
     </div>
   )
 }
@@ -331,31 +383,28 @@ function AccountSettings(): JSX.Element {
  *  这里改完终端下次启动即生效；反过来在终端 /density 改了，客户端重启后也跟随。
  * ------------------------------------------------------------------ */
 function DensitySetting(): JSX.Element {
+  const t = useT()
   const density = useStore((s) => s.toolCallDensity)
   const [note, setNote] = useState<string | null>(null)
 
   const choose = async (v: ToolCallDensity): Promise<void> => {
     setNote(null)
     const ok = await setToolCallDensity(v)
-    if (!ok) setNote('写入 ~/.grok/config.toml 失败，本次仅对当前窗口生效。')
+    if (!ok) setNote(t('settings.general.density.writeFail'))
   }
 
   return (
     <div className="settings-group">
       <div className="settings-row settings-row-head">
         <div className="settings-row-label">
-          <span className="settings-row-title">工具调用展示密度</span>
-          <span className="settings-row-desc">
-            控制对话里工具调用卡片的默认展开程度。与终端{' '}
-            <code>/density</code> 共用同一份配置（~/.grok/config.toml 的
-            <code> ui.tool_call_density</code>），这里改完终端下次启动即生效。
-          </span>
+          <span className="settings-row-title">{t('settings.general.density.title')}</span>
+          <span className="settings-row-desc">{t('settings.general.density.desc')}</span>
         </div>
       </div>
 
       {/* 竖排选项：五档的名称与效果描述同时可见，选择前就能比较。
           早先用横向分段控件，描述被挤成一条窄柱、还要靠 tooltip 才知道每档是什么。 */}
-      <div className="density-options" role="radiogroup" aria-label="工具调用展示密度">
+      <div className="density-options" role="radiogroup" aria-label={t('settings.general.density.aria')}>
         {DENSITY_OPTIONS.map((d) => {
           const active = density === d.value
           return (
@@ -370,10 +419,10 @@ function DensitySetting(): JSX.Element {
               <span className="density-radio" aria-hidden="true" />
               <span className="density-text">
                 <span className="density-label">
-                  {d.label}
+                  {t(d.labelKey)}
                   <code className="density-code">{d.value}</code>
                 </span>
-                <span className="density-desc">{d.desc}</span>
+                <span className="density-desc">{t(d.descKey)}</span>
               </span>
             </button>
           )
@@ -381,9 +430,7 @@ function DensitySetting(): JSX.Element {
       </div>
 
       {note && <div className="mcp-hint mcp-hint-warn">{note}</div>}
-      <div className="mcp-hint">
-        切换后立即在当前会话生效；已经手动展开/收起过的工具卡片会保留你的选择。
-      </div>
+      <div className="mcp-hint">{t('settings.general.density.hint')}</div>
     </div>
   )
 }

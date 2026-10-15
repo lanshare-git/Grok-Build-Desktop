@@ -235,3 +235,12 @@ export const IconGauge = ({ size = 16, className }: IconProps): JSX.Element => (
     <path d="M12 14l3.5-4" />
   </svg>
 )
+
+/** 语言（地球仪） */
+export const IconGlobe = ({ size = 16, className }: IconProps): JSX.Element => (
+  <svg {...base(size, className)}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M3 12h18" />
+    <path d="M12 3a13.7 13.7 0 0 1 3.6 9 13.7 13.7 0 0 1-3.6 9 13.7 13.7 0 0 1-3.6-9A13.7 13.7 0 0 1 12 3z" />
+  </svg>
+)

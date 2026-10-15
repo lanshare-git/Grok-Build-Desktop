@@ -1,0 +1,49 @@
+import type { mainErrors as zh } from '../zh-cn/mainErrors'
+
+export const mainErrors: typeof zh = {
+  sessionDelete: {
+    missingCwd: 'セッションに作業ディレクトリがありません',
+    invalidId: 'セッション ID が不正なため、削除を拒否しました',
+    dataRemain: (vars) =>
+      `削除に失敗しました（セッションが grok に使用中の可能性があります）：元のディレクトリにセッションデータが残っています。データのコピーはアプリ内ごみ箱に保存済みです：${vars.path}`,
+    failed: (vars) => `削除に失敗しました（セッションが grok に使用中の可能性があります）：${vars.message}`
+  },
+  sessionMove: {
+    invalidId: 'セッション ID が不正なため、移動を拒否しました',
+    missingCwd: '作業ディレクトリがありません',
+    sameDir: 'すでに目的の作業ディレクトリにあります',
+    targetNotDir: (vars) => `移動先がフォルダーではありません：${vars.path}`,
+    targetMissing: (vars) => `移動先のディレクトリが存在しません：${vars.path}`,
+    notFound: 'ディスク上にこのセッションのディレクトリが見つかりません（下書きセッション、または削除済み）',
+    outOfBounds: '移動先パスが範囲外のため、移動を拒否しました',
+    collision: (vars) =>
+      `移動先に同名のセッションディレクトリが既に存在するため、上書きしませんでした：${vars.path}`,
+    failed: (vars) => `移動に失敗しました（セッションが grok に使用中の可能性があります）：${vars.message}`
+  },
+  grokCli: {
+    binaryMissing:
+      'grok 実行ファイルが見つかりません。Grok Build がインストール済みか確認するか、環境変数 GROK_BIN を設定してください。',
+    operationFailed: '操作に失敗しました',
+    commandFailed: (vars) => `grok ${vars.command} の実行に失敗しました`,
+    pluginUnnamed: '（無名）',
+    pluginSourceRequired: 'プラグインのソース（git URL、user/repo、ローカルパス）を入力してください。',
+    marketplaceSourceRequired: 'マーケットプレイスのソース（git URL、user/repo、ローカルパス）を入力してください。',
+    marketplaceAdded: 'マーケットプレイスのソースを追加しました。',
+    marketplaceRemoved: 'マーケットプレイスのソースを削除しました。',
+    marketplaceUpdated: 'マーケットプレイスのソースを更新しました。',
+    noOutput: '（出力なし）',
+    updateNoOutput:
+      '更新コマンドは終了しましたが出力がありません。バージョン番号が変わっていない場合、ダウンロード未完了または置き換え失敗の可能性が高いです。すべての grok プロセスを閉じてからターミナルで `grok update` を再試行してください。',
+    updateFailedHint: (vars) =>
+      vars.message +
+      '\n\nヒント：更新には ~/.grok/bin/grok.exe の置き換えが必要です。他の grok プロセス（ターミナルの grok TUI、grok agent など）が動いていないか確認してください。' +
+      'デスクトップ版は自身が起動した agent を自動で停止します。クライアントを終了してターミナルで `grok update` を実行することもできます。',
+    memoryCleared: 'メモリをクリアしました。',
+    worktreeNoPath: 'grok が worktree パスを返しませんでした',
+    worktreeRemoved: 'worktree を削除しました。',
+    loginFinished: 'ログインフローが終了しました。'
+  },
+  exportMarkdown: {
+    dialogTitle: 'セッションを Markdown としてエクスポート'
+  }
+}

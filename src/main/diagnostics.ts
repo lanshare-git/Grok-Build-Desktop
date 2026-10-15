@@ -9,6 +9,7 @@ import { join } from 'node:path'
 
 import { resolveGrokBinary, resolveGrokHome } from './acp/service'
 import { readConfig } from './config'
+import { t } from './i18n'
 import { checkProxy, probeEndpointDirect } from './proxy'
 import type { DiagnosticCheck, DiagnosticsReport } from '../shared/types'
 
@@ -31,13 +32,13 @@ export async function runDiagnostics(): Promise<DiagnosticsReport> {
   const binary = resolveGrokBinary()
   checks.push(
     binary
-      ? { id: 'binary', label: 'grok 可执行文件', level: 'ok', detail: binary }
+      ? { id: 'binary', label: t('diagChecks.binary.label'), level: 'ok', detail: binary }
       : {
           id: 'binary',
-          label: 'grok 可执行文件',
+          label: t('diagChecks.binary.label'),
           level: 'error',
-          detail: '未找到',
-          hint: '请确认已安装 Grok Build；或设置环境变量 GROK_BIN 指向 grok 可执行文件。'
+          detail: t('diagChecks.binary.detailMissing'),
+          hint: t('diagChecks.binary.hintMissing')
         }
   )
 
@@ -45,19 +46,19 @@ export async function runDiagnostics(): Promise<DiagnosticsReport> {
   const homeExists = existsSync(grokHome)
   checks.push({
     id: 'grok-home',
-    label: '配置目录',
+    label: t('diagChecks.grokHome.label'),
     level: homeExists ? 'ok' : 'error',
     detail: grokHome,
-    hint: homeExists ? undefined : '该目录不存在，Grok Build 可能尚未安装或未初始化。'
+    hint: homeExists ? undefined : t('diagChecks.grokHome.hintMissing')
   })
 
   /* 3. 版本 */
   const versionJson = safeReadJson<{ version?: string }>(join(grokHome, 'version.json'))
   checks.push({
     id: 'version',
-    label: 'Grok Build 版本',
+    label: t('diagChecks.version.label'),
     level: versionJson?.version ? 'ok' : 'warn',
-    detail: versionJson?.version ?? '未知'
+    detail: versionJson?.version ?? t('diagChecks.version.detailUnknown')
   })
 
   /* 4. 登录态 */
@@ -69,10 +70,10 @@ export async function runDiagnostics(): Promise<DiagnosticsReport> {
   if (!authEntry) {
     checks.push({
       id: 'auth',
-      label: '登录态',
+      label: t('diagChecks.auth.label'),
       level: 'error',
-      detail: '未找到 auth.json',
-      hint: '请在终端执行 `grok login` 完成登录，桌面端会自动复用。'
+      detail: t('diagChecks.auth.detailMissing'),
+      hint: t('diagChecks.auth.hintMissing')
     })
   } else {
     account = authEntry.email ?? authEntry.user_id ?? null
@@ -80,12 +81,14 @@ export async function runDiagnostics(): Promise<DiagnosticsReport> {
     const expired = tokenExpiresAt ? new Date(tokenExpiresAt).getTime() < Date.now() : false
     checks.push({
       id: 'auth',
-      label: '登录态',
+      label: t('diagChecks.auth.label'),
       level: expired ? 'warn' : 'ok',
       detail: account
-        ? `${account}（令牌${expired ? '已过期，将自动刷新' : '有效'}，至 ${tokenExpiresAt}）`
-        : `已登录，至 ${tokenExpiresAt}`,
-      hint: expired ? '令牌过期后由 grok 自动用 refresh_token 续期；若失败请在终端重新登录。' : undefined
+        ? expired
+          ? t('diagChecks.auth.detailExpired', { account, expiresAt: tokenExpiresAt ?? '' })
+          : t('diagChecks.auth.detailValid', { account, expiresAt: tokenExpiresAt ?? '' })
+        : t('diagChecks.auth.detailNoAccount', { expiresAt: tokenExpiresAt ?? '' }),
+      hint: expired ? t('diagChecks.auth.hintExpired') : undefined
     })
   }
 
@@ -96,9 +99,9 @@ export async function runDiagnostics(): Promise<DiagnosticsReport> {
   const models = modelsCache?.models ? Object.keys(modelsCache.models) : []
   checks.push({
     id: 'models',
-    label: '可用模型',
+    label: t('diagChecks.models.label'),
     level: models.length > 0 ? 'ok' : 'warn',
-    detail: models.length > 0 ? models.join(', ') : '未读到模型缓存'
+    detail: models.length > 0 ? models.join(', ') : t('diagChecks.models.detailEmpty')
   })
 
   /* 6. 代理 */
@@ -109,18 +112,18 @@ export async function runDiagnostics(): Promise<DiagnosticsReport> {
     proxyReachable = check.ok
     checks.push({
       id: 'proxy',
-      label: '网络代理',
+      label: t('diagChecks.proxy.label'),
       level: check.ok ? 'ok' : 'error',
-      detail: `${proxy}（${check.detail}）`,
-      hint: check.ok ? undefined : '代理端口不可达。请确认代理客户端已启动，或改用「自动探测代理」。'
+      detail: t('diagChecks.proxy.detail', { proxy, detail: check.detail }),
+      hint: check.ok ? undefined : t('diagChecks.proxy.hintUnreachable')
     })
   } else {
     checks.push({
       id: 'proxy',
-      label: '网络代理',
+      label: t('diagChecks.proxy.label'),
       level: 'warn',
-      detail: '未配置，直连',
-      hint: '模型服务在境外，若直连超时请在下方配置代理（可一键自动探测）。'
+      detail: t('diagChecks.proxy.detailDirect'),
+      hint: t('diagChecks.proxy.hintDirect')
     })
   }
 
@@ -130,23 +133,25 @@ export async function runDiagnostics(): Promise<DiagnosticsReport> {
     // 强行直连只会得到误导性的「超时」。以代理端口可达性作为判据。
     checks.push({
       id: 'network',
-      label: '模型服务连通性',
+      label: t('diagChecks.network.label'),
       level: proxyReachable ? 'ok' : 'error',
-      detail: proxyReachable ? `经 ${proxy} 转发` : '代理不可达，无法访问模型服务',
+      detail: proxyReachable
+        ? t('diagChecks.network.detailViaProxy', { proxy })
+        : t('diagChecks.network.detailProxyDown'),
       hint: proxyReachable
-        ? '实际连通性以对话结果为准。'
-        : '请先让代理可用，再重新检查。'
+        ? t('diagChecks.network.hintViaProxy')
+        : t('diagChecks.network.hintProxyDown')
     })
   } else {
     const probe = await probeEndpointDirect(MODEL_ENDPOINT)
     checks.push({
       id: 'network',
-      label: '模型服务连通性',
+      label: t('diagChecks.network.label'),
       level: probe.ok ? 'ok' : 'error',
-      detail: `${MODEL_ENDPOINT} → ${probe.detail}`,
+      detail: t('diagChecks.network.detailDirect', { endpoint: MODEL_ENDPOINT, detail: probe.detail }),
       hint: probe.ok
         ? undefined
-        : '无法直连模型服务。若本机有代理客户端，请在下方配置或点击「自动探测代理」。'
+        : t('diagChecks.network.hintDirectFail')
     })
   }
 

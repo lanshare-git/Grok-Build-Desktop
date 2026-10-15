@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 
 import { editAndResend } from '../actions'
+import { useLocale, useT, type Locale } from '../i18n'
 import { useStore } from '../store'
 import type { ChatItem, ImageAttachment, MediaAttachment } from '@shared/types'
 
@@ -14,8 +15,8 @@ import { densityGroupsTools } from '@shared/types'
 import { IconCopy, IconEdit } from './Icons'
 
 /** 09:20 样式的短时间戳 */
-const formatTime = (at: number): string =>
-  new Date(at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
+const formatTime = (at: number, locale: Locale): string =>
+  new Date(at).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', hour12: false })
 
 function copyText(text: string): void {
   void navigator.clipboard?.writeText(text)
@@ -60,6 +61,7 @@ function extractEmbeddedMedia(text: string): MediaAttachment[] {
 }
 
 function MediaView({ media }: { media: MediaAttachment[] }): JSX.Element {
+  const t = useT()
   const [srcs, setSrcs] = useState<Record<string, string>>({})
 
   useEffect(() => {
@@ -91,14 +93,14 @@ function MediaView({ media }: { media: MediaAttachment[] }): JSX.Element {
         if (!src) {
           return (
             <div key={m.uri} className="msg-media-loading muted">
-              正在准备媒体…
+              {t('chat.preparingMedia')}
             </div>
           )
         }
         return m.kind === 'video' ? (
           <video key={m.uri} className="msg-media" src={src} controls preload="metadata" />
         ) : (
-          <img key={m.uri} className="msg-media" src={src} alt={m.name ?? '图片'} />
+          <img key={m.uri} className="msg-media" src={src} alt={m.name ?? t('chat.imageFallback')} />
         )
       })}
     </div>
@@ -115,6 +117,7 @@ function UserEditBox(props: {
   onCancel: () => void
   onSubmit: (text: string, images?: ImageAttachment[]) => void
 }): JSX.Element {
+  const t = useT()
   const [draft, setDraft] = useState(props.initial)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -177,14 +180,14 @@ function UserEditBox(props: {
               <circle cx="12" cy="12" r="9" />
               <path d="M12 8h.01M12 11v5" />
             </svg>
-            编辑后将从此处重新开始对话，已有产物不会被删除
+            {t('chat.editHint')}
           </span>
           <div className="msg-edit-actions">
             <button className="btn btn-ghost" onClick={props.onCancel}>
-              取消
+              {t('common.cancel')}
             </button>
             <button className="btn btn-primary" onClick={submit} disabled={!draft.trim()}>
-              发送
+              {t('composer.send')}
             </button>
           </div>
         </div>
@@ -198,6 +201,8 @@ function UserEditBox(props: {
  * ------------------------------------------------------------------ */
 
 export default function ChatView(): JSX.Element {
+  const t = useT()
+  const locale = useLocale()
   const session = useStore((s) => s.sessions.find((x) => x.id === s.activeId))
   const running = useStore((s) => s.running.includes(s.activeId ?? ''))
   // 正在 session/load 重放历史：此时 items 被清空，若不管就会显示 welcome 文案，
@@ -293,8 +298,8 @@ export default function ChatView(): JSX.Element {
 
         {items.length === 0 && !reloading && (
           <div className="chat-hint">
-            <p>会话已就绪，开始描述你想做的事。</p>
-            <p className="muted">Agent 可以读写文件、执行命令、检索代码——与终端版 Grok Build 能力一致。</p>
+            <p>{t('chat.readyLine1')}</p>
+            <p className="muted">{t('chat.readyLine2')}</p>
           </div>
         )}
 
@@ -322,7 +327,7 @@ export default function ChatView(): JSX.Element {
                             <img
                               key={i}
                               src={`data:${img.mimeType};base64,${img.data}`}
-                              alt={img.name ?? '图片'}
+                              alt={img.name ?? t('chat.imageFallback')}
                             />
                           ))}
                         </div>
@@ -330,10 +335,10 @@ export default function ChatView(): JSX.Element {
                       {item.text}
                     </div>
                     <div className="msg-meta">
-                      <span className="msg-time">{formatTime(item.at)}</span>
+                      <span className="msg-time">{formatTime(item.at, locale)}</span>
                       <button
                         className="msg-icon-btn"
-                        title="复制"
+                        title={t('common.copy')}
                         onClick={() => copyText(item.text)}
                       >
                         <IconCopy size={13} />
@@ -341,7 +346,7 @@ export default function ChatView(): JSX.Element {
                       {!running && (
                         <button
                           className="msg-icon-btn"
-                          title="编辑"
+                          title={t('chat.edit')}
                           onClick={() => setEditingId(item.id)}
                         >
                           <IconEdit size={13} />
@@ -388,7 +393,7 @@ export default function ChatView(): JSX.Element {
         {running && (
           <div className="running-row">
             <span className="spinner" />
-            <span>Agent 正在工作…</span>
+            <span>{t('chat.agentWorking')}</span>
           </div>
         )}
       </div>

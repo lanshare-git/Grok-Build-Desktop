@@ -5,6 +5,7 @@ import {
   chooseTrayOnClose,
   dismissCloseActionPrompt
 } from '../actions'
+import { useT } from '../i18n'
 import { useStore } from '../store'
 
 /**
@@ -12,6 +13,7 @@ import { useStore } from '../store'
  * 用户选择后即写入配置并生效；「稍后再说」仅隐藏到托盘、不记住，下次仍询问。
  */
 export default function CloseActionDialog(): JSX.Element | null {
+  const t = useT()
   const show = useStore((s) => s.showCloseActionPrompt)
   const setShow = useStore((s) => s.setShowCloseActionPrompt)
 
@@ -33,21 +35,19 @@ export default function CloseActionDialog(): JSX.Element | null {
         role="dialog"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="modal-title">关闭时如何？</div>
-        <div className="confirm-message">
-          选择点击窗口关闭按钮时的行为。你随时可以在设置中心「通用」里更改。
-        </div>
+        <div className="modal-title">{t('dialogs.closeAction.title')}</div>
+        <div className="confirm-message">{t('dialogs.closeAction.message')}</div>
 
         <div className="modal-actions">
           <button className="btn btn-ghost" onClick={() => void dismissCloseActionPrompt()}>
-            稍后再说
+            {t('dialogs.closeAction.later')}
           </button>
           <span className="modal-actions-spacer" />
           <button className="btn" onClick={() => void chooseQuitOnClose()}>
-            直接退出
+            {t('dialogs.closeAction.quit')}
           </button>
           <button className="btn btn-primary" onClick={() => void chooseTrayOnClose()}>
-            隐藏到托盘
+            {t('dialogs.closeAction.tray')}
           </button>
         </div>
       </div>

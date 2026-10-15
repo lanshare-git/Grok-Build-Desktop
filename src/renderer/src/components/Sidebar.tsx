@@ -9,6 +9,7 @@ import {
   purgeSessionData,
   resumeSession
 } from '../actions'
+import { useT } from '../i18n'
 import { useStore } from '../store'
 import {
   basename,
@@ -70,6 +71,8 @@ export default function Sidebar(): JSX.Element {
   const account = useStore((s) => s.account)
   /** 用户主目录：聊天组的归属目录（纯聊天会话永远以它为根） */
   const homeDir = useStore((s) => s.homeDir)
+  const t = useT()
+  const locale = useStore((s) => s.locale)
 
   /** 正在改别名的分组（存 group.key），以及输入框里的草稿 */
   const [editingKey, setEditingKey] = useState<string | null>(null)
@@ -137,7 +140,7 @@ export default function Sidebar(): JSX.Element {
           sessions
             .filter((s) => !s.isDraft)
             .slice(0, 120)
-            .map((s) => ({ sessionId: s.id, cwd: s.cwd, title: sessionDisplayTitle(s) }))
+            .map((s) => ({ sessionId: s.id, cwd: s.cwd, title: sessionDisplayTitle(s, locale) }))
         )
         .then((res) => {
           if (alive) setHits(res)
@@ -150,7 +153,7 @@ export default function Sidebar(): JSX.Element {
       alive = false
       window.clearTimeout(timer)
     }
-  }, [query, sessions])
+  }, [query, sessions, locale])
 
   const hitIds = hits ? new Set(hits.map((h) => h.sessionId)) : null
   const hitSnippet = (id: string): string | null =>
@@ -159,8 +162,8 @@ export default function Sidebar(): JSX.Element {
   // 搜索态下只展示命中的会话；分组结构保留，避免整页塌成一张平铺列表
   const visibleSessions = hitIds ? sessions.filter((s) => hitIds.has(s.id)) : sessions
   const groups = useMemo(
-    () => groupSessionsByWorkspace(visibleSessions, workspaces, homeDir),
-    [visibleSessions, workspaces, homeDir]
+    () => groupSessionsByWorkspace(visibleSessions, workspaces, homeDir, locale),
+    [visibleSessions, workspaces, homeDir, locale]
   )
 
   // 状态优先级：待响应 > 输出中 > 完成。
@@ -221,7 +224,7 @@ export default function Sidebar(): JSX.Element {
   /** 改会话名：预填「当前显示名」（自定义名优先，否则用 grok 的自动标题），不必重打一遍 */
   const startRenameSession = (session: SessionMeta): void => {
     setEditingSessionId(session.id)
-    setSessionDraft(sessionDisplayTitle(session))
+    setSessionDraft(sessionDisplayTitle(session, locale))
   }
 
   const commitRenameSession = (session: SessionMeta): void => {
@@ -233,40 +236,44 @@ export default function Sidebar(): JSX.Element {
   const handleRemoveGroup = (group: WorkspaceGroup): void => {
     if (group.sessions.length > 0) {
       setConfirm({
-        title: '无法移除这个工作目录',
+        title: t('sidebar.confirm.blockedTitle'),
         message: (
           <>
-            「<strong>{group.label}</strong>」下还有 {group.sessions.length} 个会话，只要这些会话还在，
-            这个目录就会一直出现在列表里。
+            {t('sidebar.confirm.blockedMsgA')}
+            <strong>{group.label}</strong>
+            {t('sidebar.confirm.blockedMsgB', { n: group.sessions.length })}
           </>
         ),
         detail: (
           <>
-            会话的工作目录在 <code className="inline-code">session/new</code> 时由 grok 确定，
-            之后无法更改。要让它消失，请先删除该目录下的所有会话（删除会话前会再确认一次）。
+            {t('sidebar.confirm.blockedDetailA')}
+            <code className="inline-code">session/new</code>
+            {t('sidebar.confirm.blockedDetailB')}
           </>
         ),
-        confirmText: '知道了'
+        confirmText: t('sidebar.confirm.gotIt')
       })
       return
     }
 
     setConfirm({
-      title: '移除工作目录？',
+      title: t('sidebar.confirm.removeTitle'),
       message: (
         <>
-          将把 <strong>{group.label}</strong> 从工作目录列表移除。
+          {t('sidebar.confirm.removeMsgA')}
+          <strong>{group.label}</strong>
+          {t('sidebar.confirm.removeMsgB')}
         </>
       ),
       detail: group.aliased
-        ? `只是取消登记（含别名「${group.label}」），磁盘上的 ${group.path} 不受影响；之后在该目录新建任务时会自动重新出现。`
-        : `只是取消登记，磁盘上的 ${group.path} 不受影响；之后在该目录新建任务时会自动重新出现。`,
-      confirmText: '移除',
-      cancelText: '取消',
+        ? t('sidebar.confirm.removeDetailAliased', { label: group.label, path: group.path })
+        : t('sidebar.confirm.removeDetail', { path: group.path }),
+      confirmText: t('sidebar.confirm.remove'),
+      cancelText: t('common.cancel'),
       danger: true,
       onConfirm: () => {
         removeWorkspace(group.path)
-        flash(`已移除工作目录 ${group.path}`)
+        flash(t('sidebar.flash.workspaceRemoved', { path: group.path }))
       }
     })
   }
@@ -283,11 +290,12 @@ export default function Sidebar(): JSX.Element {
     const willPurge = purge && onDisk
 
     return {
-      title: willPurge ? '删除会话及其磁盘文件？' : '删除会话？',
+      title: willPurge ? t('sidebar.confirm.deleteTitlePurge') : t('sidebar.confirm.deleteTitle'),
       message: (
         <>
-          即将删除会话 <strong>{sessionDisplayTitle(session)}</strong>
-          {session.items.length > 0 && `（${session.items.length} 条记录）`}。
+          {t('sidebar.confirm.deleteMsgA')}
+          <strong>{sessionDisplayTitle(session, locale)}</strong>
+          {t('sidebar.confirm.deleteMsgB', { n: session.items.length })}
         </>
       ),
       // 三个提示都是条件渲染：全不命中时要给 undefined，
@@ -295,15 +303,15 @@ export default function Sidebar(): JSX.Element {
       detail:
         isRunning || isActive || !onDisk ? (
           <>
-            {isRunning && <div className="confirm-warn">该会话正在生成中，删除会中断当前这一轮。</div>}
-            {isActive && <div className="confirm-warn">它是当前打开的会话，删除后会自动切到另一个会话。</div>}
-            {!onDisk && <div>这是尚未落盘的草稿会话，磁盘上没有对应文件。</div>}
+            {isRunning && <div className="confirm-warn">{t('sidebar.confirm.deleteWarnRunning')}</div>}
+            {isActive && <div className="confirm-warn">{t('sidebar.confirm.deleteWarnActive')}</div>}
+            {!onDisk && <div>{t('sidebar.confirm.deleteDraftNote')}</div>}
           </>
         ) : undefined,
       option: onDisk
         ? {
-            label: '同时删除磁盘上的会话文件',
-            hint: '把 ~/.grok/sessions 下该会话的目录移入系统回收站（可还原）；系统回收站不可用时移入应用内回收站。取消勾选则仅从应用列表移除，磁盘记录保留。',
+            label: t('sidebar.confirm.purgeOption'),
+            hint: t('sidebar.confirm.purgeHint'),
             checked: purge,
             onChange: (v) => {
               setPurgeOnDelete(v)
@@ -311,8 +319,8 @@ export default function Sidebar(): JSX.Element {
             }
           }
         : undefined,
-      confirmText: willPurge ? '删除会话和文件' : '从列表移除',
-      cancelText: '取消',
+      confirmText: willPurge ? t('sidebar.confirm.deleteConfirmPurge') : t('sidebar.confirm.deleteConfirmList'),
+      cancelText: t('common.cancel'),
       danger: true,
       onConfirm: () => {
         void runRemoveSession(session, purge)
@@ -321,7 +329,7 @@ export default function Sidebar(): JSX.Element {
   }
 
   async function runRemoveSession(session: SessionMeta, purge: boolean): Promise<void> {
-    const title = sessionDisplayTitle(session)
+    const title = sessionDisplayTitle(session, locale)
     if (purge && !session.isDraft) {
       // **删除前先卸载会话**：grok agent 还持有它时，落盘目录会被占用 ——
       // 一级回收站/二级搬移都可能被句柄拦下；更糟的是删完 grok 会把目录**重建为空壳**，
@@ -344,26 +352,23 @@ export default function Sidebar(): JSX.Element {
         // 而磁盘上那个目录还在（多半是 grok 正占用），下次启动又冒出来。
         // 但也不能把用户堵死 —— 弹第二个对话框，让他自己选要不要退一步。
         setConfirm({
-          title: '磁盘文件没能删掉',
+          title: t('sidebar.confirm.deleteFailedTitle'),
           message: (
             <>
-              会话 <strong>{title}</strong> 的磁盘文件仍然存在。
+              {t('sidebar.confirm.deleteFailedMsgA')}
+              <strong>{title}</strong>
+              {t('sidebar.confirm.deleteFailedMsgB')}
               <br />
               {res.reason}
             </>
           ),
-          detail: (
-            <>
-              多半是 grok 正在使用这个会话（文件被占用）。可以等它跑完再重试，
-              或者这次只把它从应用列表移除 —— 磁盘记录会保留，下次启动仍可能出现在列表里。
-            </>
-          ),
-          confirmText: '仅从列表移除',
-          cancelText: '先不删',
+          detail: t('sidebar.confirm.deleteFailedDetail'),
+          confirmText: t('sidebar.confirm.deleteFailedConfirm'),
+          cancelText: t('sidebar.confirm.deleteFailedCancel'),
           danger: true,
           onConfirm: () => {
             removeSession(session.id)
-            flash(`已从列表移除会话「${title}」，磁盘记录保留`)
+            flash(t('sidebar.flash.removedFromList', { title }))
           }
         })
         return
@@ -375,20 +380,20 @@ export default function Sidebar(): JSX.Element {
         useStore
           .getState()
           .pushLog(`[session-delete] 原目录残留空壳（不含数据）：${res.staleShell}`)
-        flash(`已删除会话「${title}」（原目录残留空壳，不影响使用）`)
+        flash(t('sidebar.flash.deletedWithShellLeft', { title }))
       } else if (res.method === 'quarantine') {
         // 真出现这条说明系统回收站删不掉（且文件确实还在）。落点写进日志，方便找回。
         useStore
           .getState()
           .pushLog(`[session-delete] 已移入应用内回收站：${res.quarantinePath}`)
-        flash(`已删除会话「${title}」（已移入应用内回收站）`)
+        flash(t('sidebar.flash.deletedToQuarantine', { title }))
       } else {
-        flash(`已删除会话「${title}」及其磁盘文件（可在系统回收站还原）`)
+        flash(t('sidebar.flash.deletedFully', { title }))
       }
       return
     }
     removeSession(session.id)
-    flash(`已从列表移除会话「${title}」，磁盘记录保留`)
+    flash(t('sidebar.flash.removedFromList', { title }))
   }
 
   /**
@@ -400,16 +405,20 @@ export default function Sidebar(): JSX.Element {
    */
   const handleMoveSession = (session: SessionMeta, toCwd: string, groupLabel: string): void => {
     if (sameDir(session.cwd, toCwd)) return
-    const title = sessionDisplayTitle(session)
+    const title = sessionDisplayTitle(session, locale)
     if (running.includes(session.id)) {
-      flash('该会话正在生成中，等这一轮结束再移动')
+      flash(t('sidebar.flash.sessionRunning'))
       return
     }
     setConfirm({
-      title: '移动到其它工作目录？',
+      title: t('sidebar.confirm.moveTitle'),
       message: (
         <>
-          把会话 <strong>{title}</strong> 移入 <strong>{groupLabel}</strong>。
+          {t('sidebar.confirm.moveMsgA')}
+          <strong>{title}</strong>
+          {t('sidebar.confirm.moveMsgB')}
+          <strong>{groupLabel}</strong>
+          {t('sidebar.confirm.moveMsgC')}
         </>
       ),
       detail: (
@@ -418,28 +427,22 @@ export default function Sidebar(): JSX.Element {
             {session.cwd} → {toCwd}
           </div>
           {session.isDraft ? (
-            <div>这是还没落盘的草稿会话，只会改掉它的工作目录。</div>
+            <div>{t('sidebar.confirm.moveDraft')}</div>
           ) : (
-            <div>
-              磁盘上的会话记录会连整段历史一起搬过去，之后这个会话就在新目录里跑：
-              工具执行、读写文件、以及 grok 的工作区记忆都以新目录为根。
-            </div>
+            <div>{t('sidebar.confirm.moveDetail')}</div>
           )}
           {session.kind === 'chat' && sameDir(session.cwd, homeDir ?? '') && (
-            <div className="confirm-warn">
-              这是纯聊天会话（原本锁定只读）。搬进项目目录后它就和普通任务一样了，
-              可以自己切换权限模式；想继续只读，搬完在右上角选回「计划模式」即可。
-            </div>
+            <div className="confirm-warn">{t('sidebar.confirm.moveChatWarn')}</div>
           )}
-          {session.id === activeId && <div>它是当前打开的会话，搬完会自动以新目录重新加载。</div>}
+          {session.id === activeId && <div>{t('sidebar.confirm.moveActiveNote')}</div>}
         </>
       ),
-      confirmText: '移动',
-      cancelText: '取消',
+      confirmText: t('sidebar.confirm.move'),
+      cancelText: t('common.cancel'),
       onConfirm: () => {
         void (async () => {
           const res = await moveSessionToWorkspace(session, toCwd)
-          flash(res.ok ? `已把「${title}」移动到 ${groupLabel}` : `移动失败：${res.message}`)
+          flash(res.ok ? t('sidebar.flash.moved', { title, label: groupLabel }) : t('sidebar.flash.moveFailed', { message: res.message }))
         })()
       }
     })
@@ -488,16 +491,16 @@ export default function Sidebar(): JSX.Element {
         onClick={() => setDirMenuOpen((v) => !v)}
       >
         <IconPlus />
-        新建任务
+        {t('sidebar.newTask')}
       </button>
 
       <button
         className="btn btn-ghost btn-block"
         onClick={() => void newChatSession()}
-        title="以主目录为根、不绑定任何项目，且锁定为只读（不写文件）开一段随聊随用的会话"
+        title={t('sidebar.newChatLongTitle')}
       >
         <IconChat />
-        新建聊天
+        {t('chat.newChat')}
       </button>
 
       <div className="sidebar-search">
@@ -505,7 +508,7 @@ export default function Sidebar(): JSX.Element {
         <input
           value={query}
           spellCheck={false}
-          placeholder="搜索会话（标题与对话内容）"
+          placeholder={t('sidebar.searchPlaceholder')}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Escape') setQuery('')
@@ -515,7 +518,7 @@ export default function Sidebar(): JSX.Element {
         {query && !searching && (
           <button
             className="icon-btn"
-            title="清空搜索"
+            title={t('sidebar.clearSearch')}
             onClick={() => setQuery('')}
           >
             <IconClose size={12} />
@@ -524,15 +527,15 @@ export default function Sidebar(): JSX.Element {
       </div>
       {hits && (
         <div className="sidebar-search-hint">
-          命中 {hits.length} 个会话{hits.length === 0 ? '，试试更短的关键词' : ''}
+          {t('sidebar.searchHits', { n: hits.length })}
         </div>
       )}
 
-      <div className="sidebar-section-label">工作目录</div>
+      <div className="sidebar-section-label">{t('sidebar.workspacesLabel')}</div>
 
       {/* 列表滚动时行会移动，卡片的固定坐标就失效了，直接收掉 */}
       <div className="session-list" onScroll={cancelPreview}>
-        {groups.length === 0 && <div className="session-empty">还没有会话</div>}
+        {groups.length === 0 && <div className="session-empty">{t('sidebar.noSessions')}</div>}
 
         {groups.map((group) => {
           // 聊天组同样允许折叠/展开（只是永远置顶）
@@ -571,8 +574,8 @@ export default function Sidebar(): JSX.Element {
                 }}
                 title={
                   group.isHome
-                    ? `聊天：固定以你的主目录为根，不绑定任何项目\n${group.path}\n点击可折叠 / 展开`
-                    : `${group.path}${group.aliased ? `　别名：${group.label}` : ''}`
+                    ? t('sidebar.homeGroupTitle', { path: group.path })
+                    : t('sidebar.groupTitle', { path: group.path, alias: group.aliased ? group.label : '' })
                 }
               >
                 <IconChevron
@@ -614,7 +617,7 @@ export default function Sidebar(): JSX.Element {
                   {group.isHome ? (
                     <button
                       className="icon-btn"
-                      title="新建聊天（以主目录为根、只读）"
+                      title={t('sidebar.newChatReadonly')}
                       onClick={(e) => {
                         e.stopPropagation()
                         void newChatSession()
@@ -626,7 +629,7 @@ export default function Sidebar(): JSX.Element {
                     <>
                       <button
                         className="icon-btn"
-                        title={`在 ${group.path} 新建任务`}
+                        title={t('sidebar.newTaskInDir', { path: group.path })}
                         onClick={(e) => {
                           e.stopPropagation()
                           void newSession(group.path)
@@ -655,7 +658,7 @@ export default function Sidebar(): JSX.Element {
                 <div className="ws-sessions">
 {group.sessions.length === 0 && (
                   <div className="ws-empty">
-                    {group.isHome ? '还没有聊天' : '还没有会话'}
+                    {group.isHome ? t('sidebar.noChats') : t('sidebar.noSessions')}
                     <button
                       className="link"
                       onClick={(e) => {
@@ -664,13 +667,13 @@ export default function Sidebar(): JSX.Element {
                         else void newSession(group.path)
                       }}
                     >
-                      {group.isHome ? '新建聊天' : '在此新建'}
+                      {group.isHome ? t('chat.newChat') : t('sidebar.newHere')}
                     </button>
                   </div>
                 )}
 
                   {group.sessions.map((session) => {
-                    const title = sessionDisplayTitle(session)
+                    const title = sessionDisplayTitle(session, locale)
                     const isRenaming = editingSessionId === session.id
                     const status = statusOf(session.id)
 
@@ -691,7 +694,7 @@ export default function Sidebar(): JSX.Element {
                           // 生成中的会话搬不了（grok 正占着会话 actor，搬目录会打断这一轮）。
                           // 拖起的瞬间就说明，别等用户拖到目标分组放下后才被告知白拖了
                           if (running.includes(session.id)) {
-                            flash('该会话正在生成中，等这一轮结束（或先停止生成）再移动')
+                            flash(t('sidebar.flash.sessionRunningDrag'))
                           }
                         }}
                         onDragEnd={endDrag}
@@ -717,10 +720,10 @@ export default function Sidebar(): JSX.Element {
                             className={`session-dot status-${status}`}
                             title={
                               status === 'running'
-                                ? '正在生成'
+                                ? t('sidebar.statusRunning')
                                 : status === 'pending'
-                                  ? '需要你响应'
-                                  : '已完成'
+                                  ? t('sidebar.statusPending')
+                                  : t('sidebar.statusDone')
                             }
                           />
                           <div className="session-item-body">
@@ -730,7 +733,7 @@ export default function Sidebar(): JSX.Element {
                                 autoFocus
                                 value={sessionDraft}
                                 placeholder={session.title}
-                                title="直接编辑；留空或改回原标题，则恢复跟随 grok 的自动标题"
+                                title={t('sidebar.renameInputTitle')}
                                 onClick={(e) => e.stopPropagation()}
                                 onFocus={(e) => e.currentTarget.select()}
                                 onChange={(e) => setSessionDraft(e.target.value)}
@@ -746,8 +749,8 @@ export default function Sidebar(): JSX.Element {
                                 className="session-item-title"
                                 title={
                                   session.customTitle
-                                    ? `${title}\n（双击改名；原名：${session.title}）`
-                                    : `${title}\n（双击改名）`
+                                    ? t('sidebar.sessionTitleCustom', { title, original: session.title })
+                                    : t('sidebar.sessionTitleAuto', { title })
                                 }
                                 onDoubleClick={(e) => {
                                   e.stopPropagation()
@@ -761,7 +764,7 @@ export default function Sidebar(): JSX.Element {
                             {!isRenaming && (
                               <div className="session-item-sub">
                                 {/* 状态只靠左侧色点（+ title 提示），不再塞文字标签抢标题宽度 */}
-                                <span>{relativeTime(sessionActivityAt(session))}</span>
+                                <span>{relativeTime(sessionActivityAt(session), locale)}</span>
                               </div>
                             )}
                             {!isRenaming && hitSnippet(session.id) && (
@@ -776,7 +779,7 @@ export default function Sidebar(): JSX.Element {
                           <span className="session-actions">
                             <button
                               className="icon-btn"
-                              title="重命名（双击标题也行）"
+                              title={t('sidebar.renameSession')}
                               onClick={(e) => {
                                 e.stopPropagation()
                                 startRenameSession(session)
@@ -786,7 +789,7 @@ export default function Sidebar(): JSX.Element {
                             </button>
                             <button
                               className="icon-btn"
-                              title="更多（导出 / 卸载 / 删除）"
+                              title={t('sidebar.moreActions')}
                               onClick={(e) => {
                                 e.stopPropagation()
                                 cancelPreview()
@@ -810,13 +813,13 @@ export default function Sidebar(): JSX.Element {
       {preview && previewSession && (
         <div className="session-preview" style={{ top: preview.top, left: preview.left }}>
           <div className="session-preview-head">
-            <span className="session-preview-title">{sessionDisplayTitle(previewSession)}</span>
+            <span className="session-preview-title">{sessionDisplayTitle(previewSession, locale)}</span>
             {previewStatus !== 'done' && (
               <span className={`session-status-tag status-${previewStatus}`}>
-                {previewStatus === 'running' ? '生成中' : '待响应'}
+                {previewStatus === 'running' ? t('sidebar.tagRunning') : t('sidebar.tagPending')}
               </span>
             )}
-            <span className="session-preview-time">{relativeTime(sessionActivityAt(previewSession))}</span>
+            <span className="session-preview-time">{relativeTime(sessionActivityAt(previewSession), locale)}</span>
           </div>
           <div className="session-preview-cwd">
             <IconFolder size={12} />
@@ -824,15 +827,15 @@ export default function Sidebar(): JSX.Element {
           </div>
           {previewSession.isDraft ? (
             <div className="session-preview-file">
-              <span className="file-label">会话文件</span>
-              <span className="file-path muted">未落盘（首次发送后创建）</span>
+              <span className="file-label">{t('sidebar.preview.fileLabel')}</span>
+              <span className="file-path muted">{t('sidebar.preview.notPersisted')}</span>
             </div>
           ) : (
             <div className="session-preview-file">
-              <span className="file-label">会话文件</span>
+              <span className="file-label">{t('sidebar.preview.fileLabel')}</span>
               <span
                 className="file-path"
-                title={previewPath ? `${previewPath}\n点击复制完整路径` : undefined}
+                title={previewPath ? t('sidebar.preview.copyPathTitle', { path: previewPath }) : undefined}
                 onClick={(e) => {
                   e.stopPropagation()
                   if (!previewPath) return
@@ -842,23 +845,23 @@ export default function Sidebar(): JSX.Element {
                   })
                 }}
               >
-                {pathCopied ? '已复制 ✓' : (previewPath ?? '…')}
+                {pathCopied ? `${t('common.copied')} ✓` : (previewPath ?? '…')}
               </span>
               <button
                 className="file-open"
-                title="在资源管理器中打开所在文件夹"
+                title={t('sidebar.preview.openInExplorer')}
                 disabled={!previewPath}
                 onClick={(e) => {
                   e.stopPropagation()
                   if (previewPath) void window.grok.revealPath(previewPath)
                 }}
               >
-                打开
+                {t('sidebar.preview.open')}
               </button>
             </div>
           )}
           {previewSession.customTitle && (
-            <div className="session-preview-origin">grok 原标题：{previewSession.title}</div>
+            <div className="session-preview-origin">{t('sidebar.preview.originalTitle', { title: previewSession.title })}</div>
           )}
         </div>
       )}
@@ -872,7 +875,7 @@ export default function Sidebar(): JSX.Element {
           className={`conn-row conn-account${accountMenuOpen ? ' is-active' : ''}`}
           ref={accountRef}
           onClick={() => setAccountMenuOpen((v) => !v)}
-          title={account ? `${account.email ?? ''}\n点击打开账号菜单` : '未登录 · 点击打开账号菜单'}
+          title={account ? t('sidebar.account.menuTitle', { email: account.email ?? '' }) : t('sidebar.account.menuTitleLoggedOut')}
         >
           <span className="account-avatar">
             {account
@@ -885,8 +888,8 @@ export default function Sidebar(): JSX.Element {
             {account
               ? [account.firstName, account.lastName].filter(Boolean).join(' ') ||
                 account.email ||
-                '已登录'
-              : '登录'}
+                t('sidebar.account.loggedIn')
+              : t('sidebar.account.login')}
           </span>
         </button>
       </div>

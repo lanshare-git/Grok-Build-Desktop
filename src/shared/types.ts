@@ -1,9 +1,11 @@
 /**
  * 共享类型定义 —— 主进程 / preload / 渲染进程三端共用。
  *
- * ACP (Agent Client Protocol) 相关类型依据 grok agent stdio 的实际行为定义，
- * 字段命名保持与协议一致（snake_case / camelCase 混用是协议原貌，不做改写）。
+ *  ACP (Agent Client Protocol) 相关类型依据 grok agent stdio 的实际行为定义，
+ *  字段命名保持与协议一致（snake_case / camelCase 混用是协议原貌，不做改写）。
  */
+
+import type { MessageKey } from './i18n'
 
 /* ------------------------------------------------------------------ *
  *  ACP 协议：内容块
@@ -585,36 +587,38 @@ export type ToolCallDensity =
 
 export interface ToolCallDensityOption {
   value: ToolCallDensity
-  label: string
-  desc: string
+  /** 字典键（density.<value>.label），消费处渲染时 t(labelKey) */
+  labelKey: MessageKey
+  /** 字典键（density.<value>.desc） */
+  descKey: MessageKey
 }
 
 /** 从详细到紧凑；desc 说明客户端的具体行为 */
 export const DENSITY_OPTIONS: ToolCallDensityOption[] = [
   {
     value: 'detailed',
-    label: '详细',
-    desc: '工具卡片默认展开，直接显示输入与输出'
+    labelKey: 'density.detailed.label',
+    descKey: 'density.detailed.desc'
   },
   {
     value: 'compact-shells',
-    label: '收起命令输出',
-    desc: '默认折叠，终端/命令类卡片连参数摘要也不显示'
+    labelKey: 'density.compact-shells.label',
+    descKey: 'density.compact-shells.desc'
   },
   {
     value: 'compact-ungrouped',
-    label: '紧凑（不分组）',
-    desc: '默认折叠，每个工具调用各占一行（grok 的默认档）'
+    labelKey: 'density.compact-ungrouped.label',
+    descKey: 'density.compact-ungrouped.desc'
   },
   {
     value: 'compact-grouped',
-    label: '紧凑 + 分组',
-    desc: '连续的同种工具调用合并成一张汇总卡'
+    labelKey: 'density.compact-grouped.label',
+    descKey: 'density.compact-grouped.desc'
   },
   {
     value: 'compact-all-grouped',
-    label: '最紧凑',
-    desc: '同工具合并汇总，并且「思考过程」默认收起'
+    labelKey: 'density.compact-all-grouped.label',
+    descKey: 'density.compact-all-grouped.desc'
   }
 ]
 
@@ -680,30 +684,44 @@ export type PermissionMode =
 
 export interface PermissionModeOption {
   value: PermissionMode
-  label: string
-  desc: string
+  /** 字典键（permissionMode.<value>.label），消费处渲染时 t(labelKey) */
+  labelKey: MessageKey
+  /** 字典键（permissionMode.<value>.desc） */
+  descKey: MessageKey
 }
 
 /** 全部权限模式（顺序即界面展示顺序；前三档与 Codex 三档一一对应） */
 export const PERMISSION_MODE_OPTIONS: PermissionModeOption[] = [
   {
     value: 'default',
-    label: '请求批准',
-    desc: '只读操作免询问，其余每次执行前询问（对应 Codex「请求批准」）'
+    labelKey: 'permissionMode.default.label',
+    descKey: 'permissionMode.default.desc'
   },
   {
     value: 'auto',
-    label: '帮我审批',
-    desc: '安全分类器自动放行日常操作，仅风险操作弹窗询问（对应 Codex「帮我审批」）'
+    labelKey: 'permissionMode.auto.label',
+    descKey: 'permissionMode.auto.desc'
   },
   {
     value: 'bypassPermissions',
-    label: '完全访问',
-    desc: '所有工具直接执行不再询问，deny 规则和 hook 仍生效（对应 Codex「完全访问权限」）'
+    labelKey: 'permissionMode.bypassPermissions.label',
+    descKey: 'permissionMode.bypassPermissions.desc'
   },
-  { value: 'acceptEdits', label: '编辑免询问', desc: '文件编辑不再询问，其他工具仍逐次询问' },
-  { value: 'dontAsk', label: '仅允许列表', desc: '只有 allow 规则内的工具免询问，适合严格管控场景' },
-  { value: 'plan', label: '计划模式', desc: '兼容占位模式（Claude 兼容设置使用）' }
+  {
+    value: 'acceptEdits',
+    labelKey: 'permissionMode.acceptEdits.label',
+    descKey: 'permissionMode.acceptEdits.desc'
+  },
+  {
+    value: 'dontAsk',
+    labelKey: 'permissionMode.dontAsk.label',
+    descKey: 'permissionMode.dontAsk.desc'
+  },
+  {
+    value: 'plan',
+    labelKey: 'permissionMode.plan.label',
+    descKey: 'permissionMode.plan.desc'
+  }
 ]
 
 export interface NewSessionOptions {

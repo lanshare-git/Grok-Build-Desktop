@@ -31,6 +31,7 @@ import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, r
 import { isAbsolute, join, relative, resolve } from 'node:path'
 
 import { resolveGrokHome } from './acp/service'
+import { t } from './i18n'
 import { encodeSessionDir, encodeSessionDirVariants } from './session-activity'
 
 export interface MoveSessionDataResult {
@@ -106,22 +107,30 @@ export async function moveSessionData(args: {
 }): Promise<MoveSessionDataResult> {
   const { sessionId, fromCwd, toCwd } = args ?? ({} as never)
   if (!sessionId || !isSafeSessionId(sessionId)) {
-    return { ok: false, reason: 'invalid-id', detail: '会话 ID 不合法，已拒绝搬移' }
+    return { ok: false, reason: 'invalid-id', detail: t('mainErrors.sessionMove.invalidId') }
   }
   if (!fromCwd || !toCwd) {
-    return { ok: false, reason: 'error', detail: '缺少工作目录' }
+    return { ok: false, reason: 'error', detail: t('mainErrors.sessionMove.missingCwd') }
   }
   if (resolve(fromCwd) === resolve(toCwd)) {
-    return { ok: false, reason: 'same-dir', detail: '已经在目标工作目录下' }
+    return { ok: false, reason: 'same-dir', detail: t('mainErrors.sessionMove.sameDir') }
   }
 
   // 目标目录必须真实存在：否则 grok 后续加载会直接 FS_NOT_FOUND
   try {
     if (!statSync(toCwd).isDirectory()) {
-      return { ok: false, reason: 'target-missing', detail: `目标目录不是文件夹：${toCwd}` }
+      return {
+        ok: false,
+        reason: 'target-missing',
+        detail: t('mainErrors.sessionMove.targetNotDir', { path: toCwd })
+      }
     }
   } catch {
-    return { ok: false, reason: 'target-missing', detail: `目标目录不存在：${toCwd}` }
+    return {
+      ok: false,
+      reason: 'target-missing',
+      detail: t('mainErrors.sessionMove.targetMissing', { path: toCwd })
+    }
   }
 
   const sessionsRoot = resolve(join(resolveGrokHome(), 'sessions'))
@@ -142,13 +151,13 @@ export async function moveSessionData(args: {
     return {
       ok: false,
       reason: 'not-found',
-      detail: '磁盘上找不到该会话的目录（草稿会话，或已被清理）'
+      detail: t('mainErrors.sessionMove.notFound')
     }
   }
 
   const toDir = resolve(join(sessionsRoot, pickTargetDirName(sessionsRoot, toCwd), sessionId))
   if (!insideRoot(sessionsRoot, toDir)) {
-    return { ok: false, reason: 'error', detail: '目标路径越界，已拒绝搬移' }
+    return { ok: false, reason: 'error', detail: t('mainErrors.sessionMove.outOfBounds') }
   }
   if (resolve(fromDir) === resolve(toDir)) {
     return { ok: true, fromDir, toDir, detail: 'already' }
@@ -158,7 +167,7 @@ export async function moveSessionData(args: {
     return {
       ok: false,
       reason: 'collision',
-      detail: `目标目录下已存在同名会话目录，未做覆盖：${toDir}`
+      detail: t('mainErrors.sessionMove.collision', { path: toDir })
     }
   }
 
@@ -175,7 +184,9 @@ export async function moveSessionData(args: {
     return {
       ok: false,
       reason: 'error',
-      detail: `搬移失败（该会话可能正被 grok 占用）：${err instanceof Error ? err.message : String(err)}`
+      detail: t('mainErrors.sessionMove.failed', {
+        message: err instanceof Error ? err.message : String(err)
+      })
     }
   }
 

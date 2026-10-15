@@ -1,5 +1,6 @@
 import { useState } from 'react'
 
+import { useT } from '../i18n'
 import { useStore } from '../store'
 import type { UserQuestionEvent } from '@shared/types'
 
@@ -10,6 +11,7 @@ import type { UserQuestionEvent } from '@shared/types'
  * 再统一提交；也可以填自定义回答。不再做成铺满全屏的模态框。
  */
 export default function QuestionPanel({ event }: { event: UserQuestionEvent }): JSX.Element | null {
+  const t = useT()
   const { questions } = event
   const [picked, setPicked] = useState<Record<number, string[]>>({})
   const [custom, setCustom] = useState<Record<number, string>>({})
@@ -55,9 +57,9 @@ export default function QuestionPanel({ event }: { event: UserQuestionEvent }): 
   return (
     <div className="prompt-card prompt-card-question">
       <div className="prompt-head">
-        <span className="prompt-badge prompt-badge-question">待回答</span>
-        <span className="prompt-title">Agent 提问</span>
-        <span className="prompt-sub-inline">需要你的选择才能继续</span>
+        <span className="prompt-badge prompt-badge-question">{t('prompts.question.badge')}</span>
+        <span className="prompt-title">{t('prompts.question.title')}</span>
+        <span className="prompt-sub-inline">{t('prompts.question.subtitle')}</span>
       </div>
 
       {questions.map((q, qi) => (
@@ -82,7 +84,7 @@ export default function QuestionPanel({ event }: { event: UserQuestionEvent }): 
           </div>
           <input
             className="question-custom"
-            placeholder="或者输入自定义回答…"
+            placeholder={t('prompts.question.customPlaceholder')}
             value={custom[qi] ?? ''}
             onChange={(e) => setCustom((prev) => ({ ...prev, [qi]: e.target.value }))}
           />
@@ -91,10 +93,10 @@ export default function QuestionPanel({ event }: { event: UserQuestionEvent }): 
 
       <div className="prompt-actions">
         <button className="btn btn-primary" disabled={!allAnswered} onClick={submitAll}>
-          提交回答
+          {t('prompts.question.submit')}
         </button>
         <button className="btn btn-ghost" onClick={() => decide(null)}>
-          取消（让 Agent 自行决定）
+          {t('prompts.question.cancelLetAgent')}
         </button>
       </div>
     </div>

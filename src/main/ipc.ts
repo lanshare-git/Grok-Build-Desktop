@@ -42,7 +42,8 @@ import {
   pluginDetails
 } from './grok-cli'
 import { clearAllAttention, clearAttention, notifyAwaitingUser } from './attention'
-import { hideWindow, requestQuit } from './tray'
+import { hideWindow, requestQuit, refreshTrayLocale } from './tray'
+import { getCurrentLocale, setCurrentLocale, t } from './i18n'
 import {
   listMcpServers,
   addMcpServer,
@@ -60,6 +61,8 @@ import type {
   ProxySettings,
   ToolCallDensity
 } from '../shared/types'
+import type { Locale } from '../shared/i18n/types'
+import type { LocaleSetting } from '../shared/api'
 
 import { getAccountInfo, logoutAccount } from './account'
 
@@ -396,7 +399,7 @@ export function registerIpc(service: AgentService): void {
       const win = BrowserWindow.fromWebContents(event.sender) ?? undefined
       const safeName = (args.title || 'session').replace(/[\\/:*?"<>|]/g, '_').slice(0, 60)
       const opts = {
-        title: '导出会话为 Markdown',
+        title: t('mainErrors.exportMarkdown.dialogTitle'),
         defaultPath: join(app.getPath('documents'), `${safeName}.md`),
         filters: [{ name: 'Markdown', extensions: ['md'] }]
       }
@@ -454,6 +457,22 @@ export function registerIpc(service: AgentService): void {
       writeConfig({ closeAction: action })
     }
   )
+
+  /* ---------- 界面语言 ---------- */
+  // 读取语言设置：raw = 用户显式选择（null = 跟随系统），resolved = 归一后生效值
+  ipcMain.handle(CH.localeGet, (): LocaleSetting => ({
+    raw: readConfig().locale,
+    resolved: getCurrentLocale()
+  }))
+
+  // 写入语言：持久化 → 更新主进程模块态 → 重建托盘 → 广播所有窗口
+  ipcMain.handle(CH.localeSet, (_e, locale: Locale | null): LocaleSetting => {
+    writeConfig({ locale })
+    const resolved = setCurrentLocale(locale)
+    refreshTrayLocale()
+    broadcast(CH.localeChanged, resolved)
+    return { raw: locale, resolved }
+  })
 
   /* ---------- 删除会话的默认行为 ---------- */
   // 删除确认弹窗里「同时删除磁盘文件」是否默认勾选（默认 true，即历史行为）

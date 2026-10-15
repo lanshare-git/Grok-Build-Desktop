@@ -2,14 +2,15 @@ import { useEffect, useRef, useState } from 'react'
 
 import { applyProxy, autoDetectProxy, connectAgent, refreshDiagnostics } from '../actions'
 import { useStore } from '../store'
-
-const LEVEL_LABEL = { ok: '正常', warn: '注意', error: '异常' } as const
+import { useT } from '../i18n'
 
 /**
  * 环境自检 —— 设置中心「环境自检」分区的内容。
  * 只渲染内容本身（标题/外壳由 SettingsDialog 提供），不再自带 drawer。
+ * 诊断检查项的 label/detail/hint 来自主进程已翻好的数据，直接渲染。
  */
 export default function DiagnosticsPanel(): JSX.Element {
+  const t = useT()
   const diagnostics = useStore((s) => s.diagnostics)
   const logs = useStore((s) => s.logs)
   const clearLogs = useStore((s) => s.clearLogs)
@@ -17,6 +18,13 @@ export default function DiagnosticsPanel(): JSX.Element {
   const [proxyInput, setProxyInput] = useState('')
   const [proxyBusy, setProxyBusy] = useState(false)
   const logRef = useRef<HTMLDivElement>(null)
+
+  const levelLabel = (level: 'ok' | 'warn' | 'error'): string =>
+    level === 'ok'
+      ? t('panels.diagnostics.levelOk')
+      : level === 'warn'
+        ? t('panels.diagnostics.levelWarn')
+        : t('panels.diagnostics.levelError')
 
   useEffect(() => {
     if (tab === 'logs' && logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
@@ -38,15 +46,16 @@ export default function DiagnosticsPanel(): JSX.Element {
 
   return (
     <div className="settings-page">
-      <div className="settings-page-title">环境自检</div>
-      <div className="settings-page-sub">检查运行依赖、登录态与网络连通性</div>
+      <div className="settings-page-title">{t('panels.diagnostics.title')}</div>
+      <div className="settings-page-sub">{t('panels.diagnostics.subtitle')}</div>
 
       <div className="drawer-tabs drawer-tabs-embedded">
         <button className={tab === 'checks' ? 'is-active' : ''} onClick={() => setTab('checks')}>
-          检查项
+          {t('panels.diagnostics.tabChecks')}
         </button>
         <button className={tab === 'logs' ? 'is-active' : ''} onClick={() => setTab('logs')}>
-          运行日志{logs.length > 0 && ` (${logs.length})`}
+          {t('panels.diagnostics.tabLogs')}
+          {logs.length > 0 && ` (${logs.length})`}
         </button>
       </div>
 
@@ -55,19 +64,19 @@ export default function DiagnosticsPanel(): JSX.Element {
             <>
               <div className="drawer-actions">
                 <button className="btn btn-ghost" onClick={() => void refreshDiagnostics()}>
-                  重新检查
+                  {t('panels.diagnostics.recheck')}
                 </button>
                 <button className="btn btn-primary" onClick={() => void connectAgent()}>
-                  重新连接
+                  {t('panels.diagnostics.reconnect')}
                 </button>
               </div>
 
-              {!diagnostics && <div className="muted pad">正在检查…</div>}
+              {!diagnostics && <div className="muted pad">{t('panels.diagnostics.checking')}</div>}
 
               {diagnostics?.checks.map((check) => (
                 <div key={check.id} className={`check check-${check.level}`}>
                   <div className="check-head">
-                    <span className={`badge badge-${check.level}`}>{LEVEL_LABEL[check.level]}</span>
+                    <span className={`badge badge-${check.level}`}>{levelLabel(check.level)}</span>
                     <span className="check-label">{check.label}</span>
                   </div>
                   <div className="check-detail">{check.detail}</div>
@@ -78,16 +87,18 @@ export default function DiagnosticsPanel(): JSX.Element {
               {/* 网络代理：grok 不读系统代理设置，必须由本应用显式配置并注入 */}
               <div className="proxy-box">
                 <div className="proxy-title">
-                  <span>网络代理</span>
+                  <span>{t('panels.diagnostics.proxyTitle')}</span>
                   <span className={`badge badge-${diagnostics?.proxy ? 'ok' : 'warn'}`}>
-                    {diagnostics?.proxy ? '已启用' : '直连'}
+                    {diagnostics?.proxy
+                      ? t('panels.diagnostics.proxyEnabled')
+                      : t('panels.diagnostics.proxyDirect')}
                   </span>
                 </div>
 
                 <div className="proxy-row">
                   <input
                     className="proxy-input"
-                    placeholder="socks5h://127.0.0.1:10808"
+                    placeholder={t('panels.diagnostics.proxyPlaceholder')}
                     value={proxyInput}
                     spellCheck={false}
                     disabled={proxyBusy}
@@ -103,7 +114,7 @@ export default function DiagnosticsPanel(): JSX.Element {
                     disabled={proxyBusy}
                     onClick={() => void runProxyAction(() => applyProxy(proxyInput.trim() || null))}
                   >
-                    保存
+                    {t('panels.diagnostics.proxySave')}
                   </button>
                 </div>
 
@@ -113,33 +124,30 @@ export default function DiagnosticsPanel(): JSX.Element {
                     disabled={proxyBusy}
                     onClick={() => void runProxyAction(autoDetectProxy)}
                   >
-                    自动探测
+                    {t('panels.diagnostics.proxyAutoDetect')}
                   </button>
                   <button
                     className="btn btn-ghost"
                     disabled={proxyBusy || !diagnostics?.proxy}
                     onClick={() => void runProxyAction(() => applyProxy(null))}
                   >
-                    改为直连
+                    {t('panels.diagnostics.proxyDirectBtn')}
                   </button>
-                  {proxyBusy && <span className="proxy-busy">处理中…</span>}
+                  {proxyBusy && <span className="proxy-busy">{t('panels.diagnostics.proxyBusy')}</span>}
                 </div>
 
-                <div className="check-hint">
-                  模型服务在境外。grok 只读 HTTP_PROXY / HTTPS_PROXY 环境变量，不读 Windows
-                  系统代理设置，因此需在此显式指定本机代理地址。修改后会自动重启 agent。
-                </div>
+                <div className="check-hint">{t('panels.diagnostics.proxyHint')}</div>
               </div>
 
               {diagnostics && (
                 <div className="drawer-meta">
                   <div>
-                    <span className="muted">配置目录</span>
+                    <span className="muted">{t('panels.diagnostics.metaConfigDir')}</span>
                     <code>{diagnostics.grokHome}</code>
                   </div>
                   <div>
-                    <span className="muted">可执行文件</span>
-                    <code>{diagnostics.grokBinary ?? '未找到'}</code>
+                    <span className="muted">{t('panels.diagnostics.metaBinary')}</span>
+                    <code>{diagnostics.grokBinary ?? t('panels.diagnostics.metaBinaryMissing')}</code>
                   </div>
                 </div>
               )}
@@ -150,11 +158,15 @@ export default function DiagnosticsPanel(): JSX.Element {
             <>
               <div className="drawer-actions">
                 <button className="btn btn-ghost" onClick={clearLogs}>
-                  清空
+                  {t('panels.diagnostics.logsClear')}
                 </button>
               </div>
               <div className="log-view" ref={logRef}>
-                {logs.length === 0 ? <div className="muted">暂无日志</div> : logs.join('')}
+                {logs.length === 0 ? (
+                  <div className="muted">{t('panels.diagnostics.logsEmpty')}</div>
+                ) : (
+                  logs.join('')
+                )}
               </div>
             </>
           )}

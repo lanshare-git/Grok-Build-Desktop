@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 
 import { CH } from '../shared/channels'
 import type { GrokDesktopApi } from '../shared/api'
+import type { Locale } from '../shared/i18n/types'
 import type {
   AcpStreamEvent,
   AgentMetaEvent,
@@ -134,6 +135,8 @@ const api: GrokDesktopApi = {
   /* 关闭行为配置 */
   getCloseAction: () => ipcRenderer.invoke(CH.closeActionGet),
   setCloseAction: (action: CloseAction | null) => ipcRenderer.invoke(CH.closeActionSet, action),
+  getLocale: () => ipcRenderer.invoke(CH.localeGet),
+  setLocale: (locale: Locale | null) => ipcRenderer.invoke(CH.localeSet, locale),
   getDeletePurgeDefault: () => ipcRenderer.invoke(CH.deletePurgeDefaultGet),
   setDeletePurgeDefault: (value: boolean) => ipcRenderer.invoke(CH.deletePurgeDefaultSet, value),
   hideWindow: () => ipcRenderer.invoke(CH.windowHide),
@@ -144,7 +147,8 @@ const api: GrokDesktopApi = {
 
   onCloseActionRequest: (cb: () => void) => subscribe(CH.closeActionRequest, cb),
   onFocusSession: (cb: (event: { sessionId: string }) => void) =>
-    subscribe(CH.pushFocusSession, cb)
+    subscribe(CH.pushFocusSession, cb),
+  onLocaleChanged: (cb: (locale: Locale) => void) => subscribe(CH.localeChanged, cb)
 }
 
 contextBridge.exposeInMainWorld('grok', api)

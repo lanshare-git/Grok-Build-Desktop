@@ -3,6 +3,7 @@ import { memo, useMemo } from 'react'
 import type { ChatItem, ToolStatus } from '@shared/types'
 import { densityHidesShellSummary } from '@shared/types'
 import { useStore } from '../store'
+import { useT, type MessageKey } from '../i18n'
 import { stringifyPretty, summarizeInput, toolIconName } from '../utils'
 import {
   IconCheck,
@@ -17,13 +18,13 @@ import {
 
 type ToolItem = Extract<ChatItem, { kind: 'tool' }>
 
-const STATUS_LABEL: Record<ToolStatus, string> = {
-  pending: '等待中',
-  in_progress: '执行中',
-  completed: '已完成',
-  failed: '失败',
+const STATUS_KEY: Record<ToolStatus, MessageKey> = {
+  pending: 'tool.status.pending',
+  in_progress: 'tool.status.in_progress',
+  completed: 'tool.status.completed',
+  failed: 'tool.status.failed',
   // 客户端兜底态：agent 没给结果，不是「执行失败」，文案必须区分开
-  interrupted: '已中断'
+  interrupted: 'tool.status.interrupted'
 }
 
 function StatusGlyph({ status }: { status: ToolStatus }): JSX.Element {
@@ -42,6 +43,7 @@ function ToolCallCardImpl({ item }: { item: ToolItem }): JSX.Element {
   const open = useStore((s) => s.isToolCallExpanded(item.toolCallId))
   const toggleToolCall = useStore((s) => s.toggleToolCall)
   const density = useStore((s) => s.toolCallDensity)
+  const t = useT()
 
   const iconName = toolIconName(item.toolKind, item.toolName)
   const Icon =
@@ -92,7 +94,7 @@ function ToolCallCardImpl({ item }: { item: ToolItem }): JSX.Element {
         {showSummary && <span className="tool-summary" title={summary}>{summary}</span>}
         <span className="tool-status">
           <StatusGlyph status={item.status} />
-          {STATUS_LABEL[item.status]}
+          {t(STATUS_KEY[item.status])}
         </span>
       </button>
 
@@ -113,12 +115,12 @@ function ToolCallCardImpl({ item }: { item: ToolItem }): JSX.Element {
           {/* toolName 从折叠行移到这里：信息不丢失，只是不再占折叠行的视觉预算 */}
           {item.toolName && (
             <div className="tool-meta">
-              工具 <span className="tool-name">{item.toolName}</span>
+              {t('tool.meta.toolLabel')} <span className="tool-name">{item.toolName}</span>
             </div>
           )}
           {item.locations && item.locations.length > 0 && (
             <div className="tool-section">
-              <div className="tool-section-label">涉及文件</div>
+              <div className="tool-section-label">{t('tool.meta.involvedFiles')}</div>
               <ul className="tool-paths">
                 {item.locations.map((loc) => (
                   <li key={`${loc.path}:${loc.line ?? ''}`}>
@@ -131,13 +133,13 @@ function ToolCallCardImpl({ item }: { item: ToolItem }): JSX.Element {
           )}
           {inputText && (
             <div className="tool-section">
-              <div className="tool-section-label">输入</div>
+              <div className="tool-section-label">{t('tool.meta.input')}</div>
               <pre className="tool-pre">{inputText}</pre>
             </div>
           )}
           {outputText && (
             <div className="tool-section">
-              <div className="tool-section-label">输出</div>
+              <div className="tool-section-label">{t('tool.meta.output')}</div>
               <pre className="tool-pre">{outputText}</pre>
             </div>
           )}

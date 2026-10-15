@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 
 import { cleanError } from '../actions'
 import { useStore } from '../store'
+import { useT } from '../i18n'
 import { formatNumber, sessionDisplayTitle } from '../utils'
 import type { SessionUsageReport, UsageTotals } from '@shared/types'
 import { IconClose, IconRefresh } from './Icons'
@@ -35,30 +36,37 @@ function fmtWhen(iso?: string): string {
 
 /** 一行汇总指标 */
 function StatRow({ totals, extra }: { totals: UsageTotals; extra?: string }): JSX.Element {
+  const t = useT()
   return (
     <>
       <div className="usage-stats">
         <div className="usage-stat">
-          <span className="usage-stat-label">输入 token</span>
+          <span className="usage-stat-label">{t('panels.usage.statInput')}</span>
           <span className="usage-stat-value">{formatNumber(totals.inputTokens)}</span>
-          <span className="usage-stat-sub">其中缓存命中 {formatNumber(totals.cachedReadTokens)}</span>
-        </div>
-        <div className="usage-stat">
-          <span className="usage-stat-label">输出 token</span>
-          <span className="usage-stat-value">{formatNumber(totals.outputTokens)}</span>
           <span className="usage-stat-sub">
-            含推理 {formatNumber(totals.reasoningTokens)}
+            {t('panels.usage.statInputCached', { n: formatNumber(totals.cachedReadTokens) })}
           </span>
         </div>
         <div className="usage-stat">
-          <span className="usage-stat-label">总 token</span>
+          <span className="usage-stat-label">{t('panels.usage.statOutput')}</span>
+          <span className="usage-stat-value">{formatNumber(totals.outputTokens)}</span>
+          <span className="usage-stat-sub">
+            {t('panels.usage.statOutputReasoning', { n: formatNumber(totals.reasoningTokens) })}
+          </span>
+        </div>
+        <div className="usage-stat">
+          <span className="usage-stat-label">{t('panels.usage.statTotal')}</span>
           <span className="usage-stat-value">{formatNumber(totals.totalTokens)}</span>
-          <span className="usage-stat-sub">模型调用 {formatNumber(totals.modelCalls)} 次</span>
+          <span className="usage-stat-sub">
+            {t('panels.usage.statModelCalls', { n: formatNumber(totals.modelCalls) })}
+          </span>
         </div>
         <div className="usage-stat is-cost">
-          <span className="usage-stat-label">花费</span>
+          <span className="usage-stat-label">{t('panels.usage.statCost')}</span>
           <span className="usage-stat-value">{fmtCost(totals.costUsd)}</span>
-          <span className="usage-stat-sub">{extra ?? `${totals.turnCount} 轮对话`}</span>
+          <span className="usage-stat-sub">
+            {extra ?? t('panels.usage.statTurns', { n: totals.turnCount })}
+          </span>
         </div>
       </div>
     </>
@@ -72,6 +80,7 @@ function ModelTable({
   rows: Array<{ modelId: string } & UsageTotals>
   title: string
 }): JSX.Element | null {
+  const t = useT()
   if (rows.length === 0) return null
   return (
     <div className="usage-block">
@@ -79,12 +88,12 @@ function ModelTable({
       <table className="usage-table">
         <thead>
           <tr>
-            <th>模型</th>
-            <th className="num">输入</th>
-            <th className="num">输出</th>
-            <th className="num">总 token</th>
-            <th className="num">调用</th>
-            <th className="num">花费</th>
+            <th>{t('panels.usage.colModel')}</th>
+            <th className="num">{t('panels.usage.colInput')}</th>
+            <th className="num">{t('panels.usage.colOutput')}</th>
+            <th className="num">{t('panels.usage.colTotal')}</th>
+            <th className="num">{t('panels.usage.colCalls')}</th>
+            <th className="num">{t('panels.usage.colCost')}</th>
           </tr>
         </thead>
         <tbody>
@@ -105,10 +114,12 @@ function ModelTable({
 }
 
 export default function UsageDialog(): JSX.Element | null {
+  const t = useT()
   const open = useStore((s) => s.usageOpen)
   const sessionId = useStore((s) => s.usageSessionId)
   const closeUsage = useStore((s) => s.closeUsage)
   const sessions = useStore((s) => s.sessions)
+  const locale = useStore((s) => s.locale)
 
   const session = sessions.find((x) => x.id === sessionId) ?? null
   const [report, setReport] = useState<SessionUsageReport | null>(null)
@@ -153,16 +164,14 @@ export default function UsageDialog(): JSX.Element | null {
       <div className="modal usage-modal" role="dialog" onClick={(e) => e.stopPropagation()}>
         <div className="usage-head">
           <div>
-            <div className="usage-title">会话用量</div>
-            <div className="usage-sub">
-              数据来自 grok 落盘的 usage.json（等价终端 <code>grok usage</code>，不受历史重放影响）
-            </div>
+            <div className="usage-title">{t('panels.usageDialog.title')}</div>
+            <div className="usage-sub">{t('panels.usageDialog.subtitle')}</div>
           </div>
           <div className="usage-head-actions">
-            <button className="icon-btn" title="刷新" onClick={() => void load()} disabled={loading}>
+            <button className="icon-btn" title={t('panels.usageDialog.refreshTitle')} onClick={() => void load()} disabled={loading}>
               <IconRefresh size={14} />
             </button>
-            <button className="icon-btn" title="关闭 (Esc)" onClick={closeUsage}>
+            <button className="icon-btn" title={t('panels.usageDialog.closeTitle')} onClick={closeUsage}>
               <IconClose size={15} />
             </button>
           </div>
@@ -174,44 +183,46 @@ export default function UsageDialog(): JSX.Element | null {
           {/* 当前会话 */}
           <div className="usage-block">
             <div className="usage-block-title">
-              当前会话
-              {session && <span className="usage-block-sub">{sessionDisplayTitle(session)}</span>}
+              {t('panels.usageDialog.currentTitle')}
+              {session && <span className="usage-block-sub">{sessionDisplayTitle(session, locale)}</span>}
             </div>
             {!session && (
-              <div className="usage-empty">
-                未选中会话。请在左侧点选一个会话，或打开「设置 → 用量」查看账号额度与全部会话累计。
-              </div>
+              <div className="usage-empty">{t('panels.usageDialog.noSession')}</div>
             )}
             {session && !loading && !report && (
-              <div className="usage-empty">
-                这个会话还没有可结算的用量（尚未产生模型调用，或会话尚未落盘）。
-              </div>
+              <div className="usage-empty">{t('panels.usageDialog.noData')}</div>
             )}
             {report && (
               <>
                 <StatRow totals={report.totals} />
                 <div className="usage-meta">
-                  主模型 {report.totals.primaryModelId ?? '—'} · 统计时间{' '}
-                  {fmtWhen(report.updatedAt)} ·{' '}
-                  {report.fromDisk ? '来自 usage.json' : '由 grok usage 兜底生成'}
+                  {t('panels.usageDialog.meta', {
+                    model: report.totals.primaryModelId ?? '—',
+                    time: fmtWhen(report.updatedAt),
+                    source: report.fromDisk
+                      ? t('panels.usageDialog.sourceDisk')
+                      : t('panels.usageDialog.sourceCli')
+                  })}
                 </div>
 
-                <ModelTable rows={report.byModel} title="按模型" />
+                <ModelTable rows={report.byModel} title={t('panels.usageDialog.byModelTitle')} />
 
                 {report.turns.length > 0 && (
                   <div className="usage-block">
-                    <div className="usage-block-title">逐轮明细（{report.turns.length} 轮）</div>
+                    <div className="usage-block-title">
+                      {t('panels.usageDialog.turnsTitle', { n: report.turns.length })}
+                    </div>
                     <div className="usage-table-scroll">
                       <table className="usage-table">
                         <thead>
                           <tr>
-                            <th className="num">#</th>
-                            <th>时间</th>
-                            <th className="num">输入</th>
-                            <th className="num">输出</th>
-                            <th className="num">推理</th>
-                            <th className="num">总 token</th>
-                            <th className="num">花费</th>
+                            <th className="num">{t('panels.usageDialog.colIndex')}</th>
+                            <th>{t('panels.usageDialog.colTime')}</th>
+                            <th className="num">{t('panels.usageDialog.colInput')}</th>
+                            <th className="num">{t('panels.usageDialog.colOutput')}</th>
+                            <th className="num">{t('panels.usageDialog.colReasoning')}</th>
+                            <th className="num">{t('panels.usageDialog.colTotal')}</th>
+                            <th className="num">{t('panels.usageDialog.colCost')}</th>
                           </tr>
                         </thead>
                         <tbody>

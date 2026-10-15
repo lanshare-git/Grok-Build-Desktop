@@ -16,6 +16,7 @@ import { promisify } from 'node:util'
 
 import { resolveGrokBinary } from './acp/service'
 import { readConfig, proxyEnv } from './config'
+import { t } from './i18n'
 import type {
   DiskUsageReport,
   GrokEnvInfo,
@@ -61,7 +62,7 @@ async function runGrokCli(
 ): Promise<{ stdout: string; stderr: string }> {
   const binary = resolveGrokBinary()
   if (!binary) {
-    throw new Error('未找到 grok 可执行文件。请确认已安装 Grok Build，或设置环境变量 GROK_BIN。')
+    throw new Error(t('mainErrors.grokCli.binaryMissing'))
   }
   try {
     return await execFileAsync(binary, args, {
@@ -73,8 +74,10 @@ async function runGrokCli(
     })
   } catch (err) {
     const e = err as { stdout?: string; stderr?: string; message?: string }
-    const msg = (e.stdout || e.stderr || e.message || '操作失败').toString().trim()
-    throw new Error(msg || `grok ${args.join(' ')} 执行失败`)
+    const msg = (e.stdout || e.stderr || e.message || t('mainErrors.grokCli.operationFailed'))
+      .toString()
+      .trim()
+    throw new Error(msg || t('mainErrors.grokCli.commandFailed', { command: args.join(' ') }))
   }
 }
 
@@ -119,7 +122,7 @@ interface RawPlugin {
 function normalizePlugin(raw: RawPlugin): PluginInfo {
   const source = raw.source as { type?: string; url?: string; path?: string } | string | undefined
   return {
-    name: raw.name ?? '(未命名)',
+    name: raw.name ?? t('mainErrors.grokCli.pluginUnnamed'),
     version: raw.version ?? '',
     // grok 未显式给 enabled 时默认视为启用（与 mcp list 的处理一致）
     enabled: raw.enabled ?? true,
@@ -140,7 +143,7 @@ export async function listPlugins(cwd?: string): Promise<PluginInfo[]> {
 /** 从 git URL / GitHub 简写 / 本地路径安装插件，返回最新列表 */
 export async function installPlugin(source: string, cwd?: string): Promise<PluginInfo[]> {
   const src = source.trim()
-  if (!src) throw new Error('请填写插件来源（git 地址、user/repo 或本地路径）。')
+  if (!src) throw new Error(t('mainErrors.grokCli.pluginSourceRequired'))
   // --trust：桌面端没有可交互的确认 TUI，不加会卡在确认提示上
   await runGrokCli(['plugin', 'install', src, '--trust'], { timeout: 180_000, cwd })
   return listPlugins(cwd)
@@ -163,7 +166,7 @@ export async function setPluginEnabled(
 /** 插件组件清单（hook / MCP / skill 等），返回 grok 打印的原始文本 */
 export async function pluginDetails(name: string, cwd?: string): Promise<string> {
   const { stdout, stderr } = await runGrokCli(['plugin', 'details', name], { cwd })
-  return (stdout || stderr || '（无输出）').trim()
+  return (stdout || stderr || t('mainErrors.grokCli.noOutput')).trim()
 }
 
 /** 已配置的插件市场源 */
@@ -188,17 +191,17 @@ export async function listMarketplaces(cwd?: string): Promise<{ name: string; gi
 
 export async function addMarketplace(source: string, cwd?: string): Promise<string> {
   const src = source.trim()
-  if (!src) throw new Error('请填写市场源（git 地址、user/repo 或本地路径）。')
+  if (!src) throw new Error(t('mainErrors.grokCli.marketplaceSourceRequired'))
   const { stdout, stderr } = await runGrokCli(['plugin', 'marketplace', 'add', src], {
     timeout: 180_000,
     cwd
   })
-  return (stdout || stderr || '已添加市场源。').trim()
+  return (stdout || stderr || t('mainErrors.grokCli.marketplaceAdded')).trim()
 }
 
 export async function removeMarketplace(name: string, cwd?: string): Promise<string> {
   const { stdout, stderr } = await runGrokCli(['plugin', 'marketplace', 'remove', name], { cwd })
-  return (stdout || stderr || '已移除市场源。').trim()
+  return (stdout || stderr || t('mainErrors.grokCli.marketplaceRemoved')).trim()
 }
 
 /** 刷新市场缓存（拉取远端插件清单） */
@@ -207,7 +210,7 @@ export async function updateMarketplaces(cwd?: string): Promise<string> {
     timeout: 180_000,
     cwd
   })
-  return (stdout || stderr || '市场源已刷新。').trim()
+  return (stdout || stderr || t('mainErrors.grokCli.marketplaceUpdated')).trim()
 }
 
 /* ------------------------------------------------------------------ *
@@ -308,15 +311,12 @@ export async function installGrokUpdate(
     const { stdout, stderr } = await runGrokCli(args, { timeout: 900_000 })
     const text = (stdout || stderr || '').trim()
     if (!text) {
-      return '更新命令已结束但没有输出。若版本号没变，多半是下载未完成或替换失败，可关闭所有 grok 进程后在终端重试 `grok update`。'
+      return t('mainErrors.grokCli.updateNoOutput')
     }
     return text
   } catch (err) {
     const msg = (err as Error).message
-    throw new Error(
-      `${msg}\n\n提示：更新需要替换 ~/.grok/bin/grok.exe。请确认没有其它 grok 进程（终端里的 grok TUI、grok agent 等）在运行；` +
-        '桌面端已会自动停止自己拉起的 agent。也可以关闭客户端后在终端执行 `grok update`。'
-    )
+    throw new Error(t('mainErrors.grokCli.updateFailedHint', { message: msg }))
   }
 }
 
@@ -326,7 +326,7 @@ export async function clearMemory(scope: MemoryClearScope, cwd?: string): Promis
   if (scope === 'global') args.push('--global')
   if (scope === 'all') args.push('--all')
   const { stdout, stderr } = await runGrokCli(args, { cwd })
-  return (stdout || stderr || '记忆已清空。').trim()
+  return (stdout || stderr || t('mainErrors.grokCli.memoryCleared')).trim()
 }
 
 interface RawInspectSkill {
@@ -433,7 +433,7 @@ export async function createWorktree(
   if (input.ref?.trim()) args.push('--ref', input.ref.trim())
   const { stdout, stderr } = await runGrokCli(args, { timeout: 180_000, cwd: input.cwd })
   const path = (stdout || '').trim().split(/\r?\n/).pop()?.trim() ?? ''
-  if (!path) throw new Error((stderr || 'grok 未返回 worktree 路径').trim())
+  if (!path) throw new Error((stderr || t('mainErrors.grokCli.worktreeNoPath')).trim())
   const list = await listWorktrees(input.cwd)
   return (
     list.find((w) => w.path.toLowerCase() === path.toLowerCase()) ?? {
@@ -458,7 +458,7 @@ export async function removeWorktree(
   if (input.force) args.push('--force')
   args.push(input.id)
   const { stdout, stderr } = await runGrokCli(args, { timeout: 120_000, cwd: input.cwd })
-  return (stdout || stderr || '已删除 worktree。').trim()
+  return (stdout || stderr || t('mainErrors.grokCli.worktreeRemoved')).trim()
 }
 
 /** gc 预览 / 执行；不传 maxAge 时 grok 不会过期任何 worktree（只做安全清理） */
@@ -469,7 +469,7 @@ export async function gcWorktrees(
   if (input.dryRun) args.push('--dry-run')
   if (input.maxAge?.trim()) args.push('--max-age', input.maxAge.trim())
   const { stdout, stderr } = await runGrokCli(args, { timeout: 180_000, cwd: input.cwd })
-  return (stdout || stderr || '（无输出）').trim()
+  return (stdout || stderr || t('mainErrors.grokCli.noOutput')).trim()
 }
 
 /* ------------------------------------------------------------------ *
@@ -485,7 +485,7 @@ export async function grokLogin(opts: { oauth?: boolean; timeout?: number } = {}
   const args = ['login']
   if (opts.oauth !== false) args.push('--oauth')
   const { stdout, stderr } = await runGrokCli(args, { timeout: opts.timeout ?? 120_000 })
-  return (stdout || stderr || '登录流程已结束。').trim()
+  return (stdout || stderr || t('mainErrors.grokCli.loginFinished')).trim()
 }
 
 /** 同步版本号读取（About/诊断面板用，避免为一个字符串等一次异步 spawn） */

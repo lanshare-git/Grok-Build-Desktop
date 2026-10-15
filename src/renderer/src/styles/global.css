@@ -4069,3 +4069,44 @@ pre {
     transform: translateY(0);
   }
 }
+
+/* ------------------------------------------------------------------ *
+ *  账号菜单 · 语言子菜单（内联展开，选中项打勾）
+ * ------------------------------------------------------------------ */
+.account-menu-sub {
+  margin: 1px 0 3px 14px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+.account-menu-sub-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s, color 0.12s;
+}
+.account-menu-sub-item:hover {
+  background: var(--bg-subtle, #eef0f3);
+  color: var(--text);
+}
+/* 选中勾固定宽度左对齐，未选中项的文字与选中项对齐 */
+.account-menu-sub-check {
+  flex: none;
+  width: 13px;
+  font-size: 12px;
+  color: var(--accent);
+}
+.account-menu-caret {
+  margin-left: 3px;
+  opacity: 0.7;
+}

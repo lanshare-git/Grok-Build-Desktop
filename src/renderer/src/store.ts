@@ -26,6 +26,7 @@ import type {
   WorkspaceMeta
 } from '@shared/types'
 import { densityExpandsByDefault } from '@shared/types'
+import { resolveLocale, t as tShared, type Locale } from '@shared/i18n'
 import { normalizeDir, toolCallOutput } from './utils'
 import type { AppVersionInfo } from '@shared/api'
 
@@ -435,6 +436,11 @@ interface AppState {
   toolCallDensity: ToolCallDensity
   /** 应用自身版本信息（不持久化，启动时从主进程取） */
   appVersion: AppVersionInfo | null
+  /**
+   * 界面语言（不持久化；唯一事实源在主进程 config.json）。
+   * 初始值同步归一 navigator.language 避免首帧闪烁，启动 effect 里再经 IPC 回源校正。
+   */
+  locale: Locale
   /** 首次点击关闭、配置为空时，主进程请求弹窗询问「关闭时如何」 */
   showCloseActionPrompt: boolean
   /** 用量面板是否打开（不持久化） */
@@ -466,6 +472,8 @@ interface AppState {
   /** 写入当前登录账户（null = 未登录）；来自主进程读取 ~/.grok/auth.json */
   setAccount(account: GrokAccount | null): void
   setAppVersion(info: AppVersionInfo | null): void
+  /** 更新界面语言缓存（唯一事实源在主进程 config.json，经 IPC 回源/广播同步） */
+  setLocale(locale: Locale): void
   /** 直接指定设置中心的分区（null = 关闭） */
   setSettingsSection(v: SettingsSection | null): void
   /* 下面三个保留旧签名（原先是各自面板的开关），内部统一落到 settingsSection：
@@ -820,6 +828,7 @@ export const useStore = create<AppState>()(
       collapsedGroups: [],
       expandedToolCalls: [],
       appVersion: null,
+      locale: resolveLocale(typeof navigator !== 'undefined' ? navigator.language : 'zh-CN'),
       showCloseActionPrompt: false,
       builtinCommands: [],
       announcements: [],
@@ -839,6 +848,7 @@ export const useStore = create<AppState>()(
       setAccount: (account) => set({ account }),
 
       setAppVersion: (appVersion) => set({ appVersion }),
+      setLocale: (locale) => set({ locale }),
 
       // agent 上报的元能力：命令与公告都以「合并」语义写入，
       // 重复推送（agent 重启后再握手一次）不会把已有内容清掉。
@@ -969,7 +979,7 @@ export const useStore = create<AppState>()(
           }
           const session: SessionMeta = {
             id,
-            title: kind === 'chat' ? '新建聊天' : '新任务',
+            title: kind === 'chat' ? tShared(get().locale, 'chat.newChat') : tShared(get().locale, 'chat.newTask'),
             cwd,
             kind,
             createdAt: Date.now(),
@@ -990,7 +1000,7 @@ export const useStore = create<AppState>()(
           const id = `draft:${crypto.randomUUID()}`
           const session: SessionMeta = {
             id,
-            title: kind === 'chat' ? '新建聊天' : '新任务',
+            title: kind === 'chat' ? tShared(get().locale, 'chat.newChat') : tShared(get().locale, 'chat.newTask'),
             cwd,
             kind,
             isDraft: true,
