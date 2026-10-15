@@ -24,6 +24,9 @@ export const common = {
   promptQuestionTitle: '任务正在提问',
   promptPermText: (vars: { name: string; label: string }) => `「${vars.name}」请求执行：${vars.label}`,
   promptQuestionText: (vars: { name: string }) => `「${vars.name}」需要你的选择才能继续`,
+  /** 系统通知（窗口失焦/藏托盘时）的正文 */
+  notifyPermBody: (vars: { name: string }) => `请求执行：${vars.name}`,
+  notifyQuestionBody: '需要你的选择才能继续',
   time: {
     justNow: '刚刚'
   }

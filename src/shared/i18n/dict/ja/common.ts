@@ -26,6 +26,8 @@ export const common: typeof zh = {
   promptQuestionTitle: 'タスクが質問しています',
   promptPermText: (vars) => `「${vars.name}」が実行をリクエスト：${vars.label}`,
   promptQuestionText: (vars) => `「${vars.name}」が続行するには選択が必要です`,
+  notifyPermBody: (vars) => `実行をリクエスト：${vars.name}`,
+  notifyQuestionBody: '続行するには選択が必要です',
   time: {
     justNow: 'たった今'
   }

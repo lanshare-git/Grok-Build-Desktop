@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 import type { WorkspaceGroup } from '../utils'
+import { useT } from '../i18n'
 import { IconEdit, IconTrash } from './Icons'
 
 /**
@@ -22,6 +23,7 @@ export default function WorkspaceToolsMenu({
 }): JSX.Element | null {
   const menuRef = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
+  const t = useT()
 
   useLayoutEffect(() => {
     if (!anchor) return
@@ -71,27 +73,27 @@ export default function WorkspaceToolsMenu({
       <button
         className="account-menu-item"
         role="menuitem"
-        title="改别名（双击名字也行）"
+        title={t('sessionTools.workspace.renameTitle')}
         onClick={() => {
           onClose()
           onRequestRename()
         }}
       >
         <IconEdit size={15} />
-        改别名
+        {t('sessionTools.workspace.rename')}
       </button>
 
       <button
         className="account-menu-item is-danger"
         role="menuitem"
-        title="从工作目录列表移除（磁盘不受影响）"
+        title={t('sessionTools.workspace.removeTitle')}
         onClick={() => {
           onClose()
           onRequestRemove()
         }}
       >
         <IconTrash size={15} />
-        从列表移除
+        {t('sessionTools.workspace.remove')}
       </button>
     </div>
   )

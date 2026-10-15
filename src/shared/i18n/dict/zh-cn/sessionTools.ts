@@ -27,5 +27,13 @@ export const sessionTools = {
     title: '选择工作目录',
     empty: '暂无最近目录，请添加工作目录',
     browse: '添加工作目录…'
+  },
+
+  /** WorkspaceToolsMenu：工作目录行的「更多」菜单 */
+  workspace: {
+    rename: '改别名',
+    renameTitle: '改别名（双击名字也行）',
+    remove: '从列表移除',
+    removeTitle: '从工作目录列表移除（磁盘不受影响）'
   }
 }

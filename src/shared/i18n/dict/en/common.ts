@@ -26,6 +26,8 @@ export const common: typeof zh = {
   promptQuestionTitle: 'Task is asking a question',
   promptPermText: (vars) => `"${vars.name}" requests: ${vars.label}`,
   promptQuestionText: (vars) => `"${vars.name}" needs your input to continue`,
+  notifyPermBody: (vars) => `Requests to run: ${vars.name}`,
+  notifyQuestionBody: 'Needs your input to continue',
   time: {
     justNow: 'just now'
   }

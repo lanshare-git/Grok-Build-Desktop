@@ -30,5 +30,13 @@ export const sessionTools: typeof zh = {
     title: 'Choose a working directory',
     empty: 'No recent directories — add a workspace first',
     browse: 'Add workspace…'
+  },
+
+  /** WorkspaceToolsMenu: the "more" menu on a workspace row */
+  workspace: {
+    rename: 'Rename alias',
+    renameTitle: 'Rename alias (double-click the name also works)',
+    remove: 'Remove from list',
+    removeTitle: 'Remove from the workspace list (on-disk data is unaffected)'
   }
 }

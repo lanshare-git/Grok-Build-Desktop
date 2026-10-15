@@ -30,5 +30,13 @@ export const sessionTools: typeof zh = {
     title: '作業ディレクトリを選択',
     empty: '最近使用したディレクトリがありません。作業ディレクトリを追加してください',
     browse: '作業ディレクトリを追加…'
+  },
+
+  /** WorkspaceToolsMenu：作業ディレクトリ行の「その他」メニュー */
+  workspace: {
+    rename: '別名を変更',
+    renameTitle: '別名を変更（名前をダブルクリックでも可）',
+    remove: 'リストから削除',
+    removeTitle: '作業ディレクトリのリストから削除します（ディスク上のデータは影響を受けません）'
   }
 }

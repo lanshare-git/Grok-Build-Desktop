@@ -439,14 +439,14 @@ export default function Composer(): JSX.Element {
           className="btn btn-send"
           onClick={submit}
           disabled={!text.trim() && attachments.length === 0}
-          title={running ? '排队发送（当前回合结束后执行）' : '发送'}
+          title={running ? t('composer.queueSendTitle') : t('composer.send')}
         >
           <IconSend size={15} />
         </button>
       </div>
       {queued && running && (
         <div className="composer-hint">
-          已排队：当前回合结束后自动发送（不想等可点左侧 ■ 中断）
+          {t('composer.queuedHint')}
         </div>
       )}
       {isImagineVideo && (

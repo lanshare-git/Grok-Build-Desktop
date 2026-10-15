@@ -90,8 +90,10 @@ export function registerIpc(service: AgentService): void {
       kind: 'perm',
       requestId: event.requestId,
       sessionId: event.sessionId,
-      title: '任务需要授权',
-      body: `请求执行：${event.toolCall?.title ?? event.toolCall?.toolName ?? '一个工具'}`
+      title: t('common.promptPermTitle'),
+      body: t('common.notifyPermBody', {
+        name: event.toolCall?.title ?? event.toolCall?.toolName ?? t('tool.meta.toolLabel')
+      })
     })
   })
   // 提问事件同样必须广播到渲染层，否则任务内的提问面板永远等不到数据
@@ -102,8 +104,8 @@ export function registerIpc(service: AgentService): void {
       kind: 'question',
       requestId: event.requestId,
       sessionId: event.sessionId,
-      title: '任务正在提问',
-      body: '需要你的选择才能继续'
+      title: t('common.promptQuestionTitle'),
+      body: t('common.notifyQuestionBody')
     })
   })
   service.on('log', (line) => broadcast(CH.pushLog, line))
