@@ -132,8 +132,12 @@ export default function App(): JSX.Element {
         const session = useStore.getState().sessions.find((x) => x.id === sessionId)
         if (session) void resumeSession(session.id, session.cwd)
       }),
-      // 语言广播：任一窗口/入口切换后同步本窗口缓存
-      window.grok.onLocaleChanged((l) => useStore.getState().setLocale(l))
+      // 语言广播：任一窗口/入口切换后同步本窗口缓存；
+      // 诊断报告由主进程按当前语言生成（快照），切语言后必须重拉，否则面板残留旧语言文案
+      window.grok.onLocaleChanged((l) => {
+        useStore.getState().setLocale(l)
+        void refreshDiagnostics()
+      })
     ]
 
     void (async () => {
