@@ -286,4 +286,6 @@ export interface GrokDesktopApi {
   onCloseActionRequest(cb: () => void): () => void
   /** agent 上报的内置命令与公告 */
   onMeta(cb: (meta: AgentMetaEvent) => void): () => void
+  /** 系统通知被点击：切到对应会话处理待授权/提问 */
+  onFocusSession(cb: (event: { sessionId: string }) => void): () => void
 }

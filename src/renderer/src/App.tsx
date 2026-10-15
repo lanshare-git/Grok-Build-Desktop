@@ -7,7 +7,8 @@ import {
   refreshAccount,
   refreshDiagnostics,
   refreshEnvInfo,
-  refreshToolCallDensity
+  refreshToolCallDensity,
+  resumeSession
 } from './actions'
 import ChatView from './components/ChatView'
 import CloseActionDialog from './components/CloseActionDialog'
@@ -122,7 +123,12 @@ export default function App(): JSX.Element {
       // 主进程在「关闭行为未配置、用户首次点关闭」时请求弹窗询问
       window.grok.onCloseActionRequest(() =>
         useStore.getState().setShowCloseActionPrompt(true)
-      )
+      ),
+      // 系统通知被点击：切到对应会话（与右下角 toast「前往处理」同语义）
+      window.grok.onFocusSession(({ sessionId }) => {
+        const session = useStore.getState().sessions.find((x) => x.id === sessionId)
+        if (session) void resumeSession(session.id, session.cwd)
+      })
     ]
 
     void (async () => {

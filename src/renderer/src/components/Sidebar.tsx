@@ -760,11 +760,7 @@ export default function Sidebar(): JSX.Element {
                             )}
                             {!isRenaming && (
                               <div className="session-item-sub">
-                                {status !== 'done' && (
-                                  <span className={`session-status-tag status-${status}`}>
-                                    {status === 'running' ? '生成中' : '待响应'}
-                                  </span>
-                                )}
+                                {/* 状态只靠左侧色点（+ title 提示），不再塞文字标签抢标题宽度 */}
                                 <span>{relativeTime(sessionActivityAt(session))}</span>
                               </div>
                             )}

@@ -41,6 +41,7 @@ import {
   updateMarketplaces,
   pluginDetails
 } from './grok-cli'
+import { clearAllAttention, clearAttention, notifyAwaitingUser } from './attention'
 import { hideWindow, requestQuit } from './tray'
 import {
   listMcpServers,
@@ -74,11 +75,34 @@ export function registerIpc(service: AgentService): void {
   service.on('state', (event) => {
     console.log('[agent-state]', event.state, event.message ?? '')
     broadcast(CH.pushState, event)
+    // agent 重启 / 退出时挂起的授权作废，清掉通知去重键
+    if (event.state === 'starting' || event.state === 'stopped' || event.state === 'error') {
+      clearAllAttention()
+    }
   })
-  service.on('permission', (event) => broadcast(CH.pushPermission, event))
+  service.on('permission', (event) => {
+    broadcast(CH.pushPermission, event)
+    // 窗口失焦 / 藏托盘时：系统通知 + 任务栏闪烁（前台只走界面内联面板）
+    notifyAwaitingUser({
+      kind: 'perm',
+      requestId: event.requestId,
+      sessionId: event.sessionId,
+      title: '任务需要授权',
+      body: `请求执行：${event.toolCall?.title ?? event.toolCall?.toolName ?? '一个工具'}`
+    })
+  })
   // 提问事件同样必须广播到渲染层，否则任务内的提问面板永远等不到数据
   // （回传通道 agentQuestionResponse 已在下方注册，但少了这里推送，面板不会出现）
-  service.on('question', (event) => broadcast(CH.pushQuestion, event))
+  service.on('question', (event) => {
+    broadcast(CH.pushQuestion, event)
+    notifyAwaitingUser({
+      kind: 'question',
+      requestId: event.requestId,
+      sessionId: event.sessionId,
+      title: '任务正在提问',
+      body: '需要你的选择才能继续'
+    })
+  })
   service.on('log', (line) => broadcast(CH.pushLog, line))
   // agent 上报的内置命令与公告（initialize 的 availableCommands / 公告通知）
   service.on('meta', (event) => broadcast(CH.pushMeta, event))
@@ -116,13 +140,17 @@ export function registerIpc(service: AgentService): void {
   )
   ipcMain.handle(
     CH.agentPermissionResponse,
-    async (_e, args: { requestId: number; optionId: string | null }) =>
+    async (_e, args: { requestId: number; optionId: string | null }) => {
+      clearAttention('perm', args.requestId)
       service.respondPermission(args.requestId, args.optionId)
+    }
   )
   ipcMain.handle(
     CH.agentQuestionResponse,
-    async (_e, args: { requestId: number; answers: Record<string, string> | null }) =>
+    async (_e, args: { requestId: number; answers: Record<string, string> | null }) => {
+      clearAttention('question', args.requestId)
       service.respondQuestion(args.requestId, args.answers)
+    }
   )
 
   /* ---------- 环境 ---------- */

@@ -110,5 +110,7 @@ export const CH = {
   pushQuestion: 'push:question',
   pushLog: 'push:log',
   /** agent 上报的内置命令（initialize）与公告（announcements/update） */
-  pushMeta: 'push:meta'
+  pushMeta: 'push:meta',
+  /** 系统通知被点击：请渲染层切到该会话去处理待授权/提问 */
+  pushFocusSession: 'push:focus-session'
 } as const

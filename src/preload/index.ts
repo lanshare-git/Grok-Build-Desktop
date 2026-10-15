@@ -142,7 +142,9 @@ const api: GrokDesktopApi = {
   accountGet: () => ipcRenderer.invoke(CH.accountGet),
   accountLogout: () => ipcRenderer.invoke(CH.accountLogout),
 
-  onCloseActionRequest: (cb: () => void) => subscribe(CH.closeActionRequest, cb)
+  onCloseActionRequest: (cb: () => void) => subscribe(CH.closeActionRequest, cb),
+  onFocusSession: (cb: (event: { sessionId: string }) => void) =>
+    subscribe(CH.pushFocusSession, cb)
 }
 
 contextBridge.exposeInMainWorld('grok', api)

@@ -4,7 +4,11 @@ import { app, BrowserWindow, protocol, shell } from 'electron'
 import { AgentService } from './acp/service'
 import { registerIpc } from './ipc'
 import { registerAssetProtocol } from './assets'
+import { bindAttention } from './attention'
 import { createTray, interceptClose, markQuitting } from './tray'
+
+// Windows 系统通知依赖 AppUserModelId；与 package.json build.appId 保持一致
+app.setAppUserModelId('com.fjh.grokbuild.desktop')
 
 // 私有媒体协议：必须在 app ready 之前声明为「标准 + 安全」方案，
 // 这样渲染进程才能像加载 https 资源一样直接用作 <video>/<img> 的 src。
@@ -102,6 +106,7 @@ if (!gotTheLock) {
     registerAssetProtocol()
     registerIpc(service)
     createWindow()
+    bindAttention(mainWindow!)
     createTray(mainWindow!, service)
 
     app.on('activate', () => {
