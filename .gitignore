@@ -21,6 +21,7 @@ Thumbs.db
 # Local tool & agent state
 .workbuddy/
 .workbuddy-ai/
+.trae/
 
 # TypeScript incremental build cache
 *.tsbuildinfo
