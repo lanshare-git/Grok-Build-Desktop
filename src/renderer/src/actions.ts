@@ -296,6 +296,22 @@ export async function resumeSession(sessionId: string, cwd: string): Promise<voi
   }
 }
 
+/**
+ * 同一会话**并发在飞**的 sendPrompt 计数（「响应中排队发送」用）。
+ *
+ * ACP 层实测会把后发的 `session/prompt` **串行排队**而不是拒绝
+ * （见 scripts/concurrent-prompt-probe.mjs：并发第 2 条不报错，但要等第 1 条跑完才返回）。
+ * 因此前端可以放开「边跑边发」；但每条 prompt 的 `finally` 都会 `setRunning(false)`，
+ * 若不计数，先完成的那条会把**还在队列里**的那条标记成「已结束」—— 界面提前显示
+ * 生成完毕、输入框解锁，实际 agent 还在跑。以计数为准：只有归零才真正结束回合。
+ */
+const activeTurns = new Map<string, number>()
+
+/** 该会话是否还有排队的回合在飞（>1 表示当前这条之外还排着） */
+export function queuedTurnCount(sessionId: string): number {
+  return Math.max(0, (activeTurns.get(sessionId) ?? 0) - 1)
+}
+
 export async function sendPrompt(text: string, images?: ImageAttachment[]): Promise<void> {
   const store = useStore.getState()
   const session = store.activeSession()
@@ -340,6 +356,8 @@ export async function sendPrompt(text: string, images?: ImageAttachment[]): Prom
   if (!activeId) return
 
   store.setRunning(activeId, true)
+  // 计入在飞回合：agent 正在跑时再发一条，这里就 +1；finally 里只有归零才收尾
+  activeTurns.set(activeId, (activeTurns.get(activeId) ?? 0) + 1)
 
   try {
     // 应用重启后 agent 进程是全新的，未加载过的会话必须先 session/load，
@@ -377,21 +395,65 @@ export async function sendPrompt(text: string, images?: ImageAttachment[]): Prom
     const s = useStore.getState()
     const target = s.activeId ?? activeId
     s.finalizeSession(target)
-    s.setRunning(target, false)
+    // 只有该会话**没有其它在飞回合**时才真正结束。
+    // 排队发送时先完成的那条不能把还在队列里的那条标记成结束，否则界面提前解锁。
+    const left = (activeTurns.get(activeId) ?? 1) - 1
+    if (left > 0) {
+      activeTurns.set(activeId, left)
+    } else {
+      activeTurns.delete(activeId)
+      s.setRunning(target, false)
+      // 客户端兜底：回合已结束（正常返回 / 报错 / 超时 / 被 ■ 中断），
+      // 但仍有工具卡停在 in_progress —— agent **不会**补发终态
+      //（scripts/cancel-tool-probe.mjs 实测：cancel 后再观察 60s 仍是 in_progress）。
+      // 不兜底那张卡就永远转圈。标成 interrupted（语义：没收到结果，不是执行失败）。
+      // ⚠️ 只在**没有任何在飞回合**时才标：排队发送的下一轮可能刚起了工具。
+      // 兜底对象用 activeId（这一轮真正属于的会话）而不是 target ——
+      // 生成途中切到别的会话时 target 是别人，扫错了会话。
+      s.markStuckTools(activeId)
+    }
     // 回合结束后用磁盘真值刷新活动时间：本轮确实产生了内容，grok 已把
     // turn_ended 等事件写进 events.jsonl，这是真实的重放安全的排序依据。
     void s.refreshActivity([target])
   }
 }
 
+/**
+ * 点 ■ 之后，隔这么久再扫一次「仍在飞的工具」。
+ *
+ * 正常路径是 `session/cancel` 让 prompt 立刻返回 → sendPrompt 的 finally 兜底。
+ * 但实测有另一种情况：prompt **迟迟不返回**（主进程对单条 prompt 的超时是 15 分钟），
+ * finally 迟迟不跑，那些工具卡就一直转圈。用户既然已经点了停止，
+ * 就没理由让他盯着一个永远转的圈 —— 隔一会儿由客户端清算。
+ *
+ * 取 15s：正常路径下 finally 早就扫过了，这里只是兜底；慢一点不影响体感，
+ * 却能避免「agent 只是慢，晚几秒才补结果」被误判（真补回来了会自动覆盖回真实状态）。
+ */
+const CANCEL_SWEEP_MS = 15_000
+
 export function cancelCurrent(): void {
   const store = useStore.getState()
   const session = store.activeSession()
   if (!session) return
-  void window.grok.cancel(session.id)
+  const id = session.id
+  // 记下**此刻**还没结束的工具：延迟扫描只清算这批，
+  // 免得把「停止之后又新起的那一轮」的工具误伤成中断。
+  const pendingToolCallIds: string[] = []
+  for (const it of session.items) {
+    if (it.kind === 'tool' && (it.status === 'in_progress' || it.status === 'pending')) {
+      pendingToolCallIds.push(it.toolCallId)
+    }
+  }
+
+  void window.grok.cancel(id)
   // 主进程会把挂起的提问/权限按取消结算，这里同步撤下界面上的待响应面板，
   // 否则「停止」后那张卡仍留在输入框上方（旧版是模态遮罩不消失）
   store.clearAllPrompts()
+
+  if (pendingToolCallIds.length === 0) return
+  window.setTimeout(() => {
+    useStore.getState().markStuckTools(id, undefined, pendingToolCallIds)
+  }, CANCEL_SWEEP_MS)
 }
 
 /**

@@ -1,6 +1,6 @@
 {
   "name": "grok-build-desktop",
-  "version": "0.24.5",
+  "version": "0.25.5",
   "description": "Grok Build 桌面 Agent 客户端 — 基于 ACP 协议复用终端版 Grok Build 的登录态、模型与工具",
   "main": "./out/main/index.js",
   "author": "FJH",

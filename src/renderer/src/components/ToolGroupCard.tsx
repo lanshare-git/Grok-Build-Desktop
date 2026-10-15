@@ -3,7 +3,7 @@ import { memo, useState } from 'react'
 import type { ChatItem } from '@shared/types'
 import { toolIconName } from '../utils'
 import ToolCallCard from './ToolCallCard'
-import { IconChevron, IconClose, IconFile, IconList, IconSearch, IconTerminal } from './Icons'
+import { IconChevron, IconClose, IconFile, IconList, IconSearch, IconStop, IconTerminal } from './Icons'
 
 type ToolItem = Extract<ChatItem, { kind: 'tool' }>
 
@@ -23,6 +23,8 @@ function ToolGroupCardImpl({ items }: { items: ToolItem[] }): JSX.Element {
   const first = items[0]
   const toolName = first.toolName || first.title
   const failed = items.filter((i) => i.status === 'failed').length
+  // 中断**不并入失败**：失败是 agent 明确报错，中断只是没收到结果，混在一个数里会误导
+  const interrupted = items.filter((i) => i.status === 'interrupted').length
   const running = items.filter((i) => i.status === 'in_progress' || i.status === 'pending').length
 
   const iconName = toolIconName(first.toolKind, first.toolName)
@@ -48,6 +50,12 @@ function ToolGroupCardImpl({ items }: { items: ToolItem[] }): JSX.Element {
           <span className="tool-status">
             <IconClose size={13} className="status-err" />
             {failed} 个失败
+          </span>
+        )}
+        {interrupted > 0 && (
+          <span className="tool-status">
+            <IconStop size={13} className="status-warn" />
+            {interrupted} 个中断
           </span>
         )}
         {running > 0 && <span className="tool-status">进行中</span>}

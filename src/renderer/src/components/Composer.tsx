@@ -51,6 +51,15 @@ export default function Composer(): JSX.Element {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const activeId = useStore((s) => s.activeId)
   const running = useStore((s) => s.running.includes(activeId ?? ''))
+  /**
+   * 「响应中发送」的排队提示。
+   * ACP 层会把后发的 `session/prompt` **串行排队**（实测见 scripts/concurrent-prompt-probe.mjs）：
+   * 消息立即上屏、但等当前回合跑完才被 agent 处理。不提示的话用户会以为「发了没反应」。
+   */
+  const [queued, setQueued] = useState(false)
+  useEffect(() => {
+    if (!running) setQueued(false)
+  }, [running])
   // 重放期间**不需要**任何 selector 或提示：输入框本来就不该被 disabled
   // （那正是「输入框卡死」的观感来源），顶部 2px 细线已足够说明「还在加载」。
   // ⚠️ selector 只能返回**原始值/稳定引用**：`?? []` 每次都产生新数组 → zustand 判定变化 →
@@ -238,7 +247,10 @@ export default function Composer(): JSX.Element {
 
   const submit = (): void => {
     const value = text.trim()
-    if ((!value && attachments.length === 0) || running) return
+    // ⚠️ 不再拦 running：agent 响应中允许继续发，ACP 会把它排到当前回合之后。
+    // （竞品 Cursor / Grok bot 就是这个体验；排队与否由 actions.activeTurns 计数保证状态正确）
+    if (!value && attachments.length === 0) return
+    if (running) setQueued(true)
     // /worktree：客户端本地命令，不发给 agent —— 弹确认后创建 worktree 任务
     if (/^\/worktree\b/i.test(value)) {
       askWorktree()
@@ -412,23 +424,28 @@ export default function Composer(): JSX.Element {
           }}
           onKeyDown={onKeyDown}
           onPaste={onPaste}
-          disabled={running}
+          /* 响应中**不禁用**：可以提前打好下一条，发送即排队（竞品 Cursor 同款体验） */
         />
-        {running ? (
+        {/* 响应中：stop 与 send **并存** —— 想打断点 stop，想补充点 send（排队） */}
+        {running && (
           <button className="btn btn-stop" onClick={cancelCurrent} title="中断当前回合">
             <IconStop size={15} />
           </button>
-        ) : (
-          <button
-            className="btn btn-send"
-            onClick={submit}
-            disabled={!text.trim() && attachments.length === 0}
-            title="发送"
-          >
-            <IconSend size={15} />
-          </button>
         )}
+        <button
+          className="btn btn-send"
+          onClick={submit}
+          disabled={!text.trim() && attachments.length === 0}
+          title={running ? '排队发送（当前回合结束后执行）' : '发送'}
+        >
+          <IconSend size={15} />
+        </button>
       </div>
+      {queued && running && (
+        <div className="composer-hint">
+          已排队：当前回合结束后自动发送（不想等可点左侧 ■ 中断）
+        </div>
+      )}
       {isImagineVideo && (
         <div className="imagine-params">
           <div className="param-row">

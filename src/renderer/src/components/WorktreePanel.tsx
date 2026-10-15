@@ -115,7 +115,7 @@ export default function WorktreePanel(): JSX.Element {
           <div className="mcp-empty">
             <IconBox size={24} />
             <p>当前没有 worktree</p>
-            <span>在侧栏工作目录上点「新建任务」旁的 ⧉，即可在独立副本里开新任务。</span>
+            <span>在输入框旁的 + 菜单选「在 worktree 中新建任务」，或输入 /worktree。</span>
           </div>
         )}
 

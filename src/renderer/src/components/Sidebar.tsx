@@ -6,7 +6,6 @@ import {
   moveSessionToWorkspace,
   newChatSession,
   newSession,
-  newSessionInWorktree,
   purgeSessionData,
   resumeSession
 } from '../actions'
@@ -26,8 +25,8 @@ import type { ConfirmSpec } from './ConfirmDialog'
 import AccountMenu from './AccountMenu'
 import DirPickerMenu from './DirPickerMenu'
 import SessionToolsMenu from './SessionToolsMenu'
+import WorkspaceToolsMenu from './WorkspaceToolsMenu'
 import {
-  IconBox,
   IconChevron,
   IconChat,
   IconClose,
@@ -35,8 +34,7 @@ import {
   IconFolder,
   IconList,
   IconPlus,
-  IconSearch,
-  IconTrash
+  IconSearch
 } from './Icons'
 
 /** 会话行的三种状态（判定优先级：待响应 > 输出中 > 完成） */
@@ -98,6 +96,10 @@ export default function Sidebar(): JSX.Element {
   const [hits, setHits] = useState<SessionSearchHit[] | null>(null)
   const [searching, setSearching] = useState(false)
   const [toolsFor, setToolsFor] = useState<{ session: SessionMeta; el: HTMLElement } | null>(null)
+  /** 工作目录行「更多」（改别名 / 移除） */
+  const [wsToolsFor, setWsToolsFor] = useState<{ group: WorkspaceGroup; el: HTMLElement } | null>(
+    null
+  )
   /**
    * 会话拖拽搬移：正在拖的会话 id + 当前悬停的目标分组 key。
    * 目标目录由 group.path 决定，落盘目录的搬运在主进程做（见 actions.moveSessionToWorkspace）。
@@ -389,39 +391,6 @@ export default function Sidebar(): JSX.Element {
     flash(`已从列表移除会话「${title}」，磁盘记录保留`)
   }
 
-  const handleRemoveSession = (group: WorkspaceGroup, sessionId: string): void => {
-    const session = group.sessions.find((x) => x.id === sessionId)
-    if (!session) return
-    setConfirm(buildRemoveSpec(session, purgeOnDelete))
-  }
-
-  /**
-   * 在工作目录的 git worktree 里开新任务（终端 `grok -w`）。
-   * worktree 由 grok 建于 ~/.grok/worktrees/ 下，会话的工作目录就是那份独立副本，
-   * 因此与主仓库互不干扰；清单与清理在设置中心「Worktree」里。
-   */
-  const askWorktree = (group: WorkspaceGroup): void => {
-    setConfirm({
-      title: '在 worktree 中新建任务？',
-      message: (
-        <>
-将基于 <strong>{group.path}</strong> 创建一份独立的 git worktree，并在其中开新任务。
-        </>
-      ),
-      detail:
-        '与主仓库的改动互不干扰（worktree 名由 grok 自动生成）。目标目录需要是 git 仓库。清单与清理在「设置 → Worktree」。',
-      confirmText: '创建并新建',
-      cancelText: '取消',
-      onConfirm: () => {
-        void (async () => {
-          const res = await newSessionInWorktree({ cwd: group.path })
-          if (res.ok) flash(`已在 worktree 中新建任务：${res.path}`)
-          else flash(`创建 worktree 失败：${res.message ?? '未知错误'}`)
-        })()
-      }
-    })
-  }
-
   /**
    * 把会话搬到另一个工作目录（拖拽到分组上，或从「更多」菜单里选）。
    *
@@ -667,33 +636,13 @@ export default function Sidebar(): JSX.Element {
                       </button>
                       <button
                         className="icon-btn"
-                        title={`在 ${group.path} 的 git worktree 里新建任务（独立代码副本，等价终端 grok -w）`}
+                        title="更多（改别名 / 移除）"
                         onClick={(e) => {
                           e.stopPropagation()
-                          void askWorktree(group)
+                          setWsToolsFor({ group, el: e.currentTarget })
                         }}
                       >
-                        <IconBox size={12} />
-                      </button>
-                      <button
-                        className="icon-btn"
-                        title="改别名（双击名字也行）"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          startRename(group)
-                        }}
-                      >
-                        <IconEdit size={12} />
-                      </button>
-                      <button
-                        className="icon-btn danger"
-                        title="从工作目录列表移除"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleRemoveGroup(group)
-                        }}
-                      >
-                        <IconTrash size={13} />
+                        <IconList size={14} />
                       </button>
                     </>
                   )}
@@ -850,16 +799,6 @@ export default function Sidebar(): JSX.Element {
                             >
                               <IconList size={14} />
                             </button>
-                            <button
-                              className="icon-btn danger"
-                              title="删除会话"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleRemoveSession(group, session.id)
-                              }}
-                            >
-                              <IconTrash size={14} />
-                            </button>
                           </span>
                         )}
                       </div>
@@ -975,6 +914,16 @@ export default function Sidebar(): JSX.Element {
             const target = toolsFor.session
             setConfirm(buildRemoveSpec(target, purgeOnDelete))
           }}
+        />
+      )}
+
+      {wsToolsFor && (
+        <WorkspaceToolsMenu
+          group={wsToolsFor.group}
+          anchor={wsToolsFor.el}
+          onClose={() => setWsToolsFor(null)}
+          onRequestRename={() => startRename(wsToolsFor.group)}
+          onRequestRemove={() => handleRemoveGroup(wsToolsFor.group)}
         />
       )}
 

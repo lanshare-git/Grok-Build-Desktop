@@ -4,7 +4,16 @@ import type { ChatItem, ToolStatus } from '@shared/types'
 import { densityHidesShellSummary } from '@shared/types'
 import { useStore } from '../store'
 import { stringifyPretty, summarizeInput, toolIconName } from '../utils'
-import { IconCheck, IconChevron, IconClose, IconFile, IconList, IconSearch, IconTerminal } from './Icons'
+import {
+  IconCheck,
+  IconChevron,
+  IconClose,
+  IconFile,
+  IconList,
+  IconSearch,
+  IconStop,
+  IconTerminal
+} from './Icons'
 
 type ToolItem = Extract<ChatItem, { kind: 'tool' }>
 
@@ -12,12 +21,15 @@ const STATUS_LABEL: Record<ToolStatus, string> = {
   pending: '等待中',
   in_progress: '执行中',
   completed: '已完成',
-  failed: '失败'
+  failed: '失败',
+  // 客户端兜底态：agent 没给结果，不是「执行失败」，文案必须区分开
+  interrupted: '已中断'
 }
 
 function StatusGlyph({ status }: { status: ToolStatus }): JSX.Element {
   if (status === 'completed') return <IconCheck size={13} className="status-ok" />
   if (status === 'failed') return <IconClose size={13} className="status-err" />
+  if (status === 'interrupted') return <IconStop size={13} className="status-warn" />
   if (status === 'in_progress') return <span className="spinner" />
   return <span className="status-idle" />
 }
@@ -59,9 +71,11 @@ function ToolCallCardImpl({ item }: { item: ToolItem }): JSX.Element {
    * 现在：输入只在展开时算；输出只在展开、或折叠态就要显示失败原因时算。
    */
   const inputText = useMemo(() => (open ? stringifyPretty(item.input) : ''), [open, item.input])
+  // 中断卡片也要在折叠态给出说明：只显示「已中断」两个字，用户不知道发生了什么
+  const showReason = item.status === 'failed' || item.status === 'interrupted'
   const outputText = useMemo(
-    () => (open || item.status === 'failed' ? stringifyPretty(item.output) : ''),
-    [open, item.status, item.output]
+    () => (open || showReason ? stringifyPretty(item.output) : ''),
+    [open, showReason, item.output]
   )
 
   return (
@@ -82,11 +96,14 @@ function ToolCallCardImpl({ item }: { item: ToolItem }): JSX.Element {
         </span>
       </button>
 
-      {/* 失败原因不藏在展开区：折叠态直接给出（通常一两行），
-          否则用户只看到「失败」两个字，得挨个展开才知道出了什么事。
+      {/* 失败/中断原因不藏在展开区：折叠态直接给出（通常一两行），
+          否则用户只看到「失败」「已中断」几个字，得挨个展开才知道出了什么事。
           完整内容仍在展开区的「输出」里，点击卡片可看全部。 */}
-      {item.status === 'failed' && outputText && (
-        <div className="tool-fail-reason" title={outputText}>
+      {showReason && outputText && (
+        <div
+          className={`tool-fail-reason${item.status === 'interrupted' ? ' is-interrupted' : ''}`}
+          title={outputText}
+        >
           {outputText}
         </div>
       )}

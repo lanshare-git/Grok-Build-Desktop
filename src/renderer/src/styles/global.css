@@ -262,9 +262,9 @@ pre {
   justify-content: flex-end;
   gap: 1px;
   flex-shrink: 0;
-  /* 固定预留三个按钮的宽度：聊天组只有一个按钮，若按内容收缩，
-     右侧计数会被挤到与其他组不同的位置，竖向对不齐 */
-  width: 68px;
+  /* 固定预留两个按钮的宽度（+ / 更多；聊天组只有一个），
+     若按内容收缩，右侧计数会被挤到不同位置、竖向对不齐 */
+  width: 46px;
   opacity: 0;
   transition: opacity 0.12s ease;
 }
@@ -1582,6 +1582,11 @@ pre {
   /* 唯一带底色的行：长列表里一眼可见，不会被「去边框」抹平。这是底线，不要退。 */
   background: var(--err-soft);
 }
+/* 中断：只有竖条变色、不加底色 —— 它不像失败那样需要「一眼可见」的强提示，
+   但必须和「已完成」区分开，否则用户会以为这个工具跑完了。 */
+.tool-interrupted {
+  border-left-color: var(--warn);
+}
 
 /* 失败原因：折叠态直接展示（最多 4 行，完整内容在展开区的「输出」里） */
 .tool-fail-reason {
@@ -1602,6 +1607,11 @@ pre {
 }
 .tool-fail-reason:hover {
   filter: brightness(0.98);
+}
+/* 中断（客户端兜底）不是失败：换成警示色，别用「失败红」误导 */
+.tool-fail-reason.is-interrupted {
+  background: var(--warn-soft);
+  color: var(--warn);
 }
 
 /* 只压紧邻的两个工具卡：.chat-inner 的 gap 16px + (-12px) = 有效 4px。
@@ -1687,6 +1697,9 @@ pre {
 }
 .status-err {
   color: var(--err);
+}
+.status-warn {
+  color: var(--warn);
 }
 .status-idle {
   width: 8px;

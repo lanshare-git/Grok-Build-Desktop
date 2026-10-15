@@ -46,7 +46,18 @@ export interface MediaAttachment {
  *  ACP 协议：工具调用 / 计划 / 配置项
  * ------------------------------------------------------------------ */
 
-export type ToolStatus = 'pending' | 'in_progress' | 'completed' | 'failed'
+/** ACP 协议里 agent 会下发的状态（`session/update` 的 status 字段只有这四种） */
+export type AcpToolStatus = 'pending' | 'in_progress' | 'completed' | 'failed'
+
+/**
+ * 工具卡状态 = ACP 状态 + 客户端兜底态 `interrupted`。
+ *
+ * `interrupted` **不会**由 agent 下发：回合已经结束（正常返回 / 报错 / 超时 / 被
+ * `session/cancel` 中断），但客户端始终没收到该工具的终态 update 时，由客户端本地
+ * 标记（见 `store.markStuckTools`）。语义是「没收到结果」，不是「执行失败」——
+ * 区别在于：**失败是 agent 明确报错，中断是 agent 压根没再说话**。
+ */
+export type ToolStatus = AcpToolStatus | 'interrupted'
 
 export interface ToolCallLocation {
   path: string
@@ -58,7 +69,7 @@ export interface AcpToolCall {
   toolCallId: string
   title?: string
   kind?: string
-  status?: ToolStatus
+  status?: AcpToolStatus
   /** xAI 扩展：内部工具 ID，如 read_file / run_terminal_cmd */
   toolName?: string
   rawInput?: unknown
@@ -110,7 +121,8 @@ export interface SessionUpdateEnvelope {
   toolCallId?: string
   title?: string
   kind?: string
-  status?: ToolStatus
+  /** agent 只会下发 AcpToolStatus 那四种；`interrupted` 是客户端本地兜底态，不会出现在协议里 */
+  status?: AcpToolStatus
   toolName?: string
   rawInput?: unknown
   rawOutput?: unknown

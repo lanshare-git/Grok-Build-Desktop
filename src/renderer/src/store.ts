@@ -120,6 +120,44 @@ function finalizeReplay(sessions: SessionMeta[], sessionId: string): SessionMeta
   return next
 }
 
+/**
+ * 工具卡「卡住」时的兜底文案。两种来源说法不同，且都刻意**不写「失败」**：
+ * 客户端确实没收到结果，写「失败」等于替 agent 编了一个它从没说过的结论。
+ */
+const STUCK_REASON_TURN = '回合已结束，客户端未收到该工具的返回结果（可能是被中断或 agent 侧超时）。'
+const STUCK_REASON_REPLAY = '这是上一次进程里未完成的调用，重启后不会再有结果。'
+
+/**
+ * 把「非终态」的工具卡标成 `interrupted` —— 纯本地状态，不依赖 agent 下发。
+ *
+ * 依据（scripts/cancel-tool-probe.mjs 实测，别凭感觉改）：`session/cancel`
+ * **只结束 prompt，停不掉在飞的工具**，agent 也不会补发终态 update
+ * —— 观测 60s，该卡始终是 `in_progress`。没有兜底就是永远转圈。
+ *
+ * 无变化时返回**原数组**（保持引用稳定，memo 才跳得掉整列表重渲染）。
+ */
+function markStuckToolsIn(items: ChatItem[], reason: string, only?: string[]): ChatItem[] {
+  const hit = (it: ChatItem): boolean =>
+    it.kind === 'tool' &&
+    (it.status === 'in_progress' || it.status === 'pending') &&
+    // 传了白名单就只清算**中断那一刻在飞的那批** —— 中途新起的调用不能被误伤
+    (!only || only.includes(it.toolCallId))
+  if (!items.some(hit)) return items
+  return items.map((it) => (hit(it) ? { ...it, status: 'interrupted' as const, output: reason } : it))
+}
+
+/** 重放收尾版：会话正在真实生成中时不许动（同 finalizeReplay 的守卫理由） */
+function markStuckToolsAfterReplay(sessions: SessionMeta[], sessionId: string): SessionMeta[] {
+  if (useStore.getState().running.includes(sessionId)) return sessions
+  const index = sessions.findIndex((x) => x.id === sessionId)
+  if (index === -1) return sessions
+  const items = markStuckToolsIn(sessions[index].items, STUCK_REASON_REPLAY)
+  if (items === sessions[index].items) return sessions
+  const next = [...sessions]
+  next[index] = { ...sessions[index], items }
+  return next
+}
+
 function appendText(items: ChatItem[], kind: TextKind, text?: string): ChatItem[] {
   if (!text) return items
   const last = items[items.length - 1]
@@ -524,6 +562,15 @@ interface AppState {
   finalizeSession(sessionId: string): void
   /** 编辑重发：删除指定 item 及其之后的所有内容（UI 层从头开始对话） */
   truncateFrom(sessionId: string, itemId: string): void
+
+  /**
+   * 客户端兜底：把该会话里**没有终态**的工具卡标成 `interrupted`，返回被标记的数量。
+   *
+   * 只在「回合已结束 / 已中断」时调用（sendPrompt 的 finally、点 ■ 后的延迟扫描、重放收尾）——
+   * 生成途中**绝不能无条件调**：一个跑了 3 分钟的长命令会被误判成「没收到结果」。
+   * 真要在生成途中清理，必须传 `onlyToolCallIds` 限定到具体那几个调用。
+   */
+  markStuckTools(sessionId: string, reason?: string, onlyToolCallIds?: string[]): number
 
   pushLog(line: string): void
   clearLogs(): void
@@ -1097,7 +1144,10 @@ advanceReplayProgress: (sessionId, applied) =>
           // 会停在 `streaming: true`（没人再调 finalizeSession —— 那个只在 sendPrompt 里调）。
           // 结果就是历史消息末尾**永久闪烁一个生成光标**，用户会误以为那里能输入。
           //（实测 WorkHub 会话 01a12f33：331 条 update 重放后残留 1 条 streaming=true。）
-          sessions: finalizeReplay(s.sessions, sessionId),
+          // 顺带兜底：重放是从磁盘读的历史，里面**未完成的工具调用**永远等不到结果
+          //（那是上一个 agent 进程的事，新进程不会为它补发终态）—— 不标就是永远转圈。
+          // 正是「重启客户端后某张卡一直『执行中』」的成因（2026-10-15）。
+          sessions: markStuckToolsAfterReplay(finalizeReplay(s.sessions, sessionId), sessionId),
    suppressActivityUntil: { ...s.suppressActivityUntil, [sessionId]: now + 1200 },
 replayCapUntil: { ...s.replayCapUntil, [sessionId]: now + REPLAY_SLIDING_CAP_MS },
       reloadingSessions: s.reloadingSessions.filter((id) => id !== sessionId),
@@ -1234,6 +1284,27 @@ clearLoadedSessions: () =>
             return { ...x, items: finalize(x.items.slice(0, idx)), updatedAt: Date.now() }
           })
         })),
+
+      markStuckTools: (sessionId, reason = STUCK_REASON_TURN, onlyToolCallIds) => {
+        // 先读一次判空：没有卡住的卡就**完全不 set()**（persist 每次 set 都要全量序列化）
+        const session = get().sessions.find((x) => x.id === sessionId)
+        if (!session) return 0
+        const stuck = session.items.filter(
+          (it) =>
+            it.kind === 'tool' &&
+            (it.status === 'in_progress' || it.status === 'pending') &&
+            (!onlyToolCallIds || onlyToolCallIds.includes(it.toolCallId))
+        ).length
+        if (stuck === 0) return 0
+        set((s) => ({
+          // ⚠️ 刻意不刷 `updatedAt`：这是**界面纠偏**而不是新内容，
+          // 刷了会让该会话在侧栏凭空跳到最前（排序/活动时间都按它派生）。
+          sessions: s.sessions.map((x) =>
+            x.id === sessionId ? { ...x, items: markStuckToolsIn(x.items, reason, onlyToolCallIds) } : x
+          )
+        }))
+        return stuck
+      },
 
       pushLog: (line) => set((s) => ({ logs: [...s.logs, line].slice(-500) })),
       clearLogs: () => set({ logs: [] }),
