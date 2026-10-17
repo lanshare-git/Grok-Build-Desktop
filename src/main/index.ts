@@ -17,11 +17,11 @@ protocol.registerSchemesAsPrivileged([
   { scheme: 'grok-asset', privileges: { standard: true, secure: true, supportFetchAPI: true, bypassCSP: true } }
 ])
 
-/** 应用图标：打包后位于 resources/build/，开发态位于项目 build/ 目录 */
+/** 应用图标：打包后位于 resources/build/，开发态位于项目 build/ 目录。Linux 优先 png。 */
 function iconPath(): string {
-  return app.isPackaged
-    ? join(process.resourcesPath, 'build', 'icon.ico')
-    : join(__dirname, '../../build/icon.ico')
+  const dir = app.isPackaged ? join(process.resourcesPath, 'build') : join(__dirname, '../../build')
+  if (process.platform === 'linux') return join(dir, 'icon.png')
+  return join(dir, 'icon.ico')
 }
 
 const service = new AgentService({ permissionMode: 'bypassPermissions' })

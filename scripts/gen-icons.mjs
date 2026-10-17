@@ -12,15 +12,14 @@
  *     而不是等用户看到旧图标才发现
  *
  * 产物：
- *   build/icon.ico        256×256（PNG-in-ICO，Vista+ 与 electron-builder 均支持）
- *   build/tray-*.png      32×32 托盘三态（ok 绿 / attention 黄 / error 红）
+ *   build/icon.ico              256×256（PNG-in-ICO，Vista+ 与 electron-builder 均支持）
+ *   build/icon.png              512×512（Linux 窗口图标 / electron-builder 入口）
+ *   build/icons/{size}x{size}.png  Linux deb 桌面图标集（16…512）
+ *   build/tray-*.png            32×32 托盘三态（ok 绿 / attention 黄 / error 红）
  *
  * ⚠️ 这些文件是「生成物」，但必须提交进仓库：
  *   dev 模式（npm run dev）不走打包，src/main/index.ts / src/main/tray.ts 开发态直接读
  *   build/ 下的文件 —— 不提交的话新克隆仓库连图标都没有。
- *
- * 注：曾输出过 512px 的 build/icon.png（文档/网站素材），因项目从未引用已移除——
- * ico 内嵌的 256px PNG 就是同一图案，需要大图时临时改 ICON_SIZE 跑一次即可。
  *
  * ★ 图标内容的来源（重要）★
  * 白色标志（断口环 + 月牙斜划）是 Grok 官方 logo 的有机形状，
@@ -260,6 +259,8 @@ function drawTrayIcon(size, rgb) {
 // ─────────────────────── 输出 ───────────────────────
 
 const ICON_SIZE = 256 // ico 内嵌尺寸（electron-builder 要求 ≥256）
+const ICON_PNG_SIZE = 512 // Linux 窗口图标 / electron-builder 入口
+const LINUX_ICON_SIZES = [16, 32, 48, 64, 128, 256, 512]
 const TRAY_SIZE = 32
 
 // 托盘三态配色（预留：加 `--tray` 才生成，当前项目无托盘）
@@ -271,7 +272,12 @@ const TRAY_STATES = {
 
 function iconOutputs() {
   return [
-    [join(ROOT, 'build', 'icon.ico'), encodeIco(encodePng(ICON_SIZE, drawAppIcon(ICON_SIZE)), ICON_SIZE)]
+    [join(ROOT, 'build', 'icon.ico'), encodeIco(encodePng(ICON_SIZE, drawAppIcon(ICON_SIZE)), ICON_SIZE)],
+    [join(ROOT, 'build', 'icon.png'), encodePng(ICON_PNG_SIZE, drawAppIcon(ICON_PNG_SIZE))],
+    ...LINUX_ICON_SIZES.map((size) => [
+      join(ROOT, 'build', 'icons', `${size}x${size}.png`),
+      encodePng(size, drawAppIcon(size))
+    ])
   ]
 }
 
@@ -310,7 +316,7 @@ if (process.argv.includes('--check')) {
   process.exit(1)
 }
 
-mkdirSync(join(ROOT, 'build'), { recursive: true })
+mkdirSync(join(ROOT, 'build', 'icons'), { recursive: true })
 for (const [file, bytes] of allOutputs()) {
   writeFileSync(file, bytes)
   console.log('生成 →', file)

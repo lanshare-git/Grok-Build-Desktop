@@ -35,7 +35,9 @@ Grok Build 的桌面 Agent 客户端。**不重新实现模型调用**，而是�
 
 ## 快速开始
 
-### 方式一：直接用打包好的 exe（推荐）
+### 方式一：安装包（推荐）
+
+**Windows**
 
 | 产物 | 路径 | 说明 |
 | --- | --- | --- |
@@ -43,6 +45,16 @@ Grok Build 的桌面 Agent 客户端。**不重新实现模型调用**，而是�
 | 安装包 | `dist/Grok Build Desktop Setup <版本号>.exe` | 双击安装，可自选安装目录，生成开始菜单快捷方式 |
 
 > 首次运行若被 Windows SmartScreen 拦下（应用未做代码签名），点「更多信息」→「仍要运行」。
+
+**Linux（Debian / Ubuntu）**
+
+```bash
+npm run dist:linux          # 产出 dist/grok-build-desktop_<版本>_amd64.deb
+npm run install:linux       # sudo/pkexec 安装到系统，写入应用菜单
+```
+
+安装后可在应用菜单搜索「Grok Build Desktop」，或命令行执行 `grok-build-desktop`。  
+卸载：`sudo apt remove grok-build-desktop`。
 
 ### 方式二：从源码运行
 
@@ -63,10 +75,13 @@ npm run dev
 | `npm run build` | 构建到 `out/` |
 | `npm start` | 预览构建产物 |
 | `npm run typecheck` | 主进程 + 渲染进程类型检查 |
-| `npm run pack` | 打包免安装版到 `dist/win-unpacked/` |
+| `npm run pack` | 打包免安装版到 `dist/win-unpacked/`（Windows） |
+| `npm run pack:linux` | 打包免安装目录到 `dist/linux-unpacked/` |
 | `npm run dist` | 打包成 Windows 安装包（输出到 `dist/`） |
+| `npm run dist:linux` | 打包成 Linux `.deb`（输出到 `dist/`） |
+| `npm run install:linux` | 把刚打好的 `.deb` 安装到本机（进应用菜单） |
 | `npm run sync-app` | 把打包产物同步到免安装绿版 `app/`（自动检测运行态、成对校验） |
-| `npm run deploy` | 等价于 `pack` + `sync-app`，一步出绿版 |
+| `npm run deploy` | 等价于 `pack` + `sync-app`，一步出绿版（Windows） |
 
 ## 版本管理
 

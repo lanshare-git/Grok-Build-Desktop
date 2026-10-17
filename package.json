@@ -1,6 +1,6 @@
 {
   "name": "grok-build-desktop",
-  "version": "0.28.0",
+  "version": "0.29.0",
   "description": "Grok Build 桌面 Agent 客户端 — 基于 ACP 协议复用终端版 Grok Build 的登录态、模型与工具",
   "main": "./out/main/index.js",
   "author": "FJH",
@@ -14,9 +14,12 @@
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "pack": "npm run build && electron-builder --dir",
+    "pack:linux": "npm run build && electron-builder --linux dir",
     "dist": "npm run build && electron-builder",
+    "dist:linux": "npm run build && electron-builder --linux deb",
     "sync-app": "node scripts/sync-app.mjs",
     "deploy": "npm run pack && npm run sync-app",
+    "install:linux": "node scripts/install-linux.mjs",
     "gen:icons": "node scripts/gen-icons.mjs",
     "version:show": "node scripts/version.mjs",
     "version:patch": "node scripts/version.mjs patch",
@@ -47,7 +50,7 @@
   },
   "build": {
     "appId": "com.fjh.grokbuild.desktop",
-    "productName": "Grok Build Desktop",
+    "productName": "GrokBuildDesktop",
     "directories": {
       "output": "dist"
     },
@@ -64,11 +67,39 @@
           ]
         }
       ],
-      "icon": "build/icon.ico"
+      "icon": "build/icon.ico",
+      "executableName": "Grok Build Desktop"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "category": "Development",
+      "icon": "build/icons",
+      "executableName": "grok-build-desktop",
+      "maintainer": "FJH <257783038+lanshare-git@users.noreply.github.com>",
+      "desktop": {
+        "Name": "Grok Build Desktop",
+        "Comment": "Grok Build 桌面 Agent 客户端",
+        "Categories": "Development;Utility;",
+        "StartupWMClass": "grok-build-desktop"
+      }
+    },
+    "deb": {
+      "packageName": "grok-build-desktop",
+      "priority": "optional",
+      "afterInstall": "scripts/deb-after-install.sh"
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Grok Build Desktop",
+      "uninstallDisplayName": "Grok Build Desktop"
     },
     "extraResources": [
       "build"
