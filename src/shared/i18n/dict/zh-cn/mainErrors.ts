@@ -37,7 +37,8 @@ export const mainErrors = {
     memoryCleared: '记忆已清空。',
     worktreeNoPath: 'grok 未返回 worktree 路径',
     worktreeRemoved: '已删除 worktree。',
-    loginFinished: '登录流程已结束。'
+    loginFinished: '登录流程已结束。',
+    loginTimeout: '登录等待超时（5 分钟内未完成浏览器授权）。请重试，或在终端执行 grok login。'
   },
   exportMarkdown: {
     dialogTitle: '导出会话为 Markdown'

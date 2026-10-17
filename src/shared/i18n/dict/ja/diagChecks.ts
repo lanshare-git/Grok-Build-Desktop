@@ -20,7 +20,7 @@ export const diagChecks: typeof zh = {
     label: 'ログイン状態',
     detailMissing: 'auth.json が見つかりません',
     hintMissing:
-      'ターミナルで `grok login` を実行してログインしてください。デスクトップ版が自動で引き継ぎます。',
+      '「設定 → アカウント」からログインするか、ターミナルで `grok login` を実行してください。デスクトップ版が自動で引き継ぎます。',
     detailValid: (vars) => `${vars.account}（トークン有効、${vars.expiresAt} まで）`,
     detailExpired: (vars) =>
       `${vars.account}（トークン期限切れ、自動更新されます。${vars.expiresAt} まで）`,

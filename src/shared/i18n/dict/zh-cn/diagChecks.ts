@@ -15,7 +15,7 @@ export const diagChecks = {
   auth: {
     label: '登录态',
     detailMissing: '未找到 auth.json',
-    hintMissing: '请在终端执行 `grok login` 完成登录，桌面端会自动复用。',
+    hintMissing: '请在「设置 → 账号」点击登录，或在终端执行 `grok login`；桌面端会自动复用。',
     detailValid: (vars: { account: string; expiresAt: string }) =>
       `${vars.account}（令牌有效，至 ${vars.expiresAt}）`,
     detailExpired: (vars: { account: string; expiresAt: string }) =>

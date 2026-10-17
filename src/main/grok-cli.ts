@@ -11,8 +11,9 @@
  * - 只调 grok 自己的子命令，绝不碰磁盘文件，避免与 agent 的写入竞争
  */
 
-import { execFile, execFileSync } from 'node:child_process'
+import { execFile, execFileSync, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
+import { shell } from 'electron'
 
 import { resolveGrokBinary } from './acp/service'
 import { readConfig, proxyEnv } from './config'
@@ -476,16 +477,91 @@ export async function gcWorktrees(
  *  登录（终端 `grok login`）
  * ------------------------------------------------------------------ */
 
+export interface GrokLoginOptions {
+  /**
+   * 兼容旧调用：`oauth: true` 走浏览器 OAuth；默认走 `--device-auth`，
+   * 无 TTY 时也能把设备码/URL 打到 stdout，方便桌面端展示。
+   */
+  oauth?: boolean
+  /** 超时（ms）。设备码授权需要用户在浏览器操作，默认 5 分钟 */
+  timeout?: number
+  /** 每收到一行 stdout/stderr 回调一次（供 UI 实时展示） */
+  onLine?: (line: string) => void
+}
+
 /**
  * 触发 grok 登录流程。
- * `-y` 不存在，因此这是**交互式**命令：无 TTY 时 grok 会自行走设备码/浏览器流程，
- * 超时或失败都由调用方把原文展示给用户（提示回终端执行 `grok login`）。
+ * 桌面端无 TTY：默认 `--device-auth`，边跑边推送输出，并自动打开检测到的 URL。
  */
-export async function grokLogin(opts: { oauth?: boolean; timeout?: number } = {}): Promise<string> {
+export async function grokLogin(opts: GrokLoginOptions = {}): Promise<string> {
+  const binary = resolveGrokBinary()
+  if (!binary) {
+    throw new Error(t('mainErrors.grokCli.binaryMissing'))
+  }
+
   const args = ['login']
-  if (opts.oauth !== false) args.push('--oauth')
-  const { stdout, stderr } = await runGrokCli(args, { timeout: opts.timeout ?? 120_000 })
-  return (stdout || stderr || t('mainErrors.grokCli.loginFinished')).trim()
+  if (opts.oauth === true) args.push('--oauth')
+  else args.push('--device-auth')
+
+  const timeout = opts.timeout ?? 300_000
+  const openedUrls = new Set<string>()
+  const chunks: string[] = []
+
+  const emit = (chunk: string): void => {
+    const text = chunk.toString()
+    chunks.push(text)
+    for (const raw of text.split(/\r?\n/)) {
+      const line = raw.trim()
+      if (!line) continue
+      opts.onLine?.(line)
+      const urls = line.match(/https?:\/\/[^\s]+/g) ?? []
+      for (const url of urls) {
+        if (openedUrls.has(url)) continue
+        openedUrls.add(url)
+        void shell.openExternal(url).catch(() => {
+          /* 用户可手动点 UI 里的链接 */
+        })
+      }
+    }
+  }
+
+  return await new Promise<string>((resolve, reject) => {
+    const child = spawn(binary, args, {
+      env: grokEnv(),
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe']
+    })
+
+    let settled = false
+    const timer = setTimeout(() => {
+      if (settled) return
+      settled = true
+      child.kill('SIGTERM')
+      reject(new Error(t('mainErrors.grokCli.loginTimeout')))
+    }, timeout)
+
+    child.stdout?.on('data', (d: Buffer | string) => emit(String(d)))
+    child.stderr?.on('data', (d: Buffer | string) => emit(String(d)))
+
+    child.on('error', (err) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      reject(err)
+    })
+
+    child.on('close', (code) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      const out = chunks.join('').trim()
+      if (code === 0) {
+        resolve(out || t('mainErrors.grokCli.loginFinished'))
+        return
+      }
+      reject(new Error(out || t('mainErrors.grokCli.commandFailed', { command: args.join(' ') })))
+    })
+  })
 }
 
 /** 同步版本号读取（About/诊断面板用，避免为一个字符串等一次异步 spawn） */

@@ -41,7 +41,9 @@ export const mainErrors: typeof zh = {
     memoryCleared: 'Memory cleared.',
     worktreeNoPath: 'grok did not return a worktree path',
     worktreeRemoved: 'Worktree removed.',
-    loginFinished: 'The login flow has finished.'
+    loginFinished: 'The login flow has finished.',
+    loginTimeout:
+      'Sign-in timed out (no browser authorization within 5 minutes). Retry, or run grok login in a terminal.'
   },
   exportMarkdown: {
     dialogTitle: 'Export session as Markdown'

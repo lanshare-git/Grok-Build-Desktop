@@ -294,10 +294,18 @@ function AccountSettings(): JSX.Element {
   const displayName =
     [account?.firstName, account?.lastName].filter(Boolean).join(' ') || account?.email || t('settings.account.notLoggedIn')
 
+  // 登录过程中实时追加设备码 / URL，方便用户在窗口内对照
+  useEffect(() => {
+    if (!busy) return
+    return window.grok.onLoginProgress((line) => {
+      setLoginNote((prev) => (prev ? `${prev}\n${line}` : line))
+    })
+  }, [busy])
+
   const onLogin = async (): Promise<void> => {
     if (busy) return
     setBusy(true)
-    setLoginNote(null)
+    setLoginNote(t('settings.account.loggingIn'))
     try {
       const text = await loginGrok()
       setLoginNote(text)
@@ -367,12 +375,21 @@ function AccountSettings(): JSX.Element {
 
       <div className="modal-actions" style={{ padding: 0 }}>
         <span className="modal-actions-spacer" />
-        <button className="btn btn-danger" disabled={busy || !account} onClick={() => void onLogout()}>
-          {busy ? t('settings.account.loggingOut') : t('settings.account.logout')}
-        </button>
+        {account ? (
+          <button className="btn btn-danger" disabled={busy} onClick={() => void onLogout()}>
+            {busy ? t('settings.account.loggingOut') : t('settings.account.logout')}
+          </button>
+        ) : (
+          <button className="btn btn-primary" disabled={busy} onClick={() => void onLogin()}>
+            {busy ? t('settings.account.loggingIn') : t('settings.account.login')}
+          </button>
+        )}
       </div>
 
-      <div className="about-hint">{t('settings.account.logoutHint')}</div>
+      {loginNote && <pre className="account-login-note">{loginNote}</pre>}
+      <div className="about-hint">
+        {account ? t('settings.account.logoutHint') : t('settings.account.loginHint')}
+      </div>
     </div>
   )
 }

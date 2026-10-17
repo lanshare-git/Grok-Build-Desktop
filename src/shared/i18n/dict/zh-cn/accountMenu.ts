@@ -22,6 +22,7 @@ export const accountMenu = {
   notLoggedIn: '未登录',
   settings: '设置',
   language: '语言',
+  login: '登录',
   logout: '退出登录',
   loggingOut: '退出中…'
 }

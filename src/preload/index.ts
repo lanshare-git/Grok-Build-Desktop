@@ -73,6 +73,7 @@ const api: GrokDesktopApi = {
   onPermission: (cb: (event: PermissionRequestEvent) => void) => subscribe(CH.pushPermission, cb),
   onQuestion: (cb: (event: UserQuestionEvent) => void) => subscribe(CH.pushQuestion, cb),
   onLog: (cb: (line: string) => void) => subscribe(CH.pushLog, cb),
+  onLoginProgress: (cb: (line: string) => void) => subscribe(CH.pushLoginProgress, cb),
   onMeta: (cb: (meta: AgentMetaEvent) => void) => subscribe(CH.pushMeta, cb),
 
   mcpList: () => ipcRenderer.invoke(CH.mcpList),
@@ -114,7 +115,7 @@ const api: GrokDesktopApi = {
   worktreeGc: (input?: { maxAge?: string; dryRun?: boolean; cwd?: string }) =>
     ipcRenderer.invoke(CH.worktreeGc, input),
 
-  login: (opts?: { oauth?: boolean }) => ipcRenderer.invoke(CH.login, opts),
+  login: (opts?: { oauth?: boolean }) => ipcRenderer.invoke(CH.login, opts ?? {}),
 
   /* 会话工具 */
   sessionSearch: (query: string, candidates: Array<{ sessionId: string; cwd: string; title: string }>) =>

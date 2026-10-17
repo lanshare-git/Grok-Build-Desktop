@@ -56,9 +56,12 @@ export const settings: typeof zh = {
     teamDesc: '現在のアカウントが所属するチーム識別子',
     authMode: '認証方式',
     authModeDesc: 'ログイン時に使用した認証タイプ',
+    login: 'ログイン',
+    loggingIn: 'ログイン中…',
+    loginHint: 'ブラウザが開き、デバイスコード認証を行います。完了後、デスクトップ版とターミナル版は同じログイン状態を共有します。',
     logout: 'ログアウト',
     loggingOut: 'ログアウト中…',
     loginFailed: (vars) => `ログイン失敗：${vars.message}`,
-    logoutHint: 'ログアウトするとローカルにキャッシュされた資格情報を削除し、agent を再起動します。再度利用するには再ログインしてください（ターミナルで grok login を実行）。'
+    logoutHint: 'ログアウトするとローカルにキャッシュされた資格情報を削除し、agent を再起動します。再度利用するにはこのページから再ログインしてください。'
   }
 }

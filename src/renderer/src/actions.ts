@@ -766,18 +766,19 @@ export async function newSessionInWorktree(input: {
   }
 }
 
-/** 登录（等价终端 `grok login`）：返回 grok 的原始输出，供界面展示需要人工确认的步骤 */
-export async function loginGrok(): Promise<string> {
+/** 登录（默认设备码）：返回 grok 的完整输出；过程中通过 onLoginProgress 推送中间行 */
+export async function loginGrok(opts?: { oauth?: boolean }): Promise<string> {
   const store = useStore.getState()
   try {
-    const text = await window.grok.login({ oauth: true })
-    store.pushLog('[login] grok login 已执行\n')
+    const text = await window.grok.login(opts)
+    store.pushLog('[login] grok login 已完成\n')
     await refreshAccount()
+    void refreshDiagnostics()
     return text
   } catch (err) {
     const msg = cleanError(err)
     store.pushLog(`[login] 失败：${msg}\n`)
-    return `登录未完成：${msg}`
+    throw err instanceof Error ? err : new Error(msg)
   }
 }
 

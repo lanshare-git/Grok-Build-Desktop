@@ -41,7 +41,9 @@ export const mainErrors: typeof zh = {
     memoryCleared: 'メモリをクリアしました。',
     worktreeNoPath: 'grok が worktree パスを返しませんでした',
     worktreeRemoved: 'worktree を削除しました。',
-    loginFinished: 'ログインフローが終了しました。'
+    loginFinished: 'ログインフローが終了しました。',
+    loginTimeout:
+      'ログイン待機がタイムアウトしました（5 分以内にブラウザ認可が完了しませんでした）。再試行するか、ターミナルで grok login を実行してください。'
   },
   exportMarkdown: {
     dialogTitle: 'セッションを Markdown としてエクスポート'

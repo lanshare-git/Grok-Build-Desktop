@@ -56,9 +56,12 @@ export const settings: typeof zh = {
     teamDesc: 'Team identifier of the current account',
     authMode: 'Auth method',
     authModeDesc: 'Authentication type used at sign-in',
+    login: 'Sign in',
+    loggingIn: 'Signing in…',
+    loginHint: 'A browser window will open for device-code authorization. After that, the desktop app and terminal share the same login state.',
     logout: 'Sign out',
     loggingOut: 'Signing out…',
     loginFailed: (vars) => `Sign-in failed: ${vars.message}`,
-    logoutHint: 'Signing out clears locally cached credentials and restarts the agent; to use the app again, sign in again (run grok login in a terminal).'
+    logoutHint: 'Signing out clears locally cached credentials and restarts the agent; sign in again from this page when you need to use the app.'
   }
 }

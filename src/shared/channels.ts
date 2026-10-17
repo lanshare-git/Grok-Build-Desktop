@@ -69,6 +69,8 @@ export const CH = {
   worktreeGc: 'grok:worktree-gc',
   /** 登录（grok login） */
   login: 'grok:login',
+  /** 登录过程中的实时输出（设备码 / URL 等） */
+  pushLoginProgress: 'push:login-progress',
   /** 会话全文搜索 */
   sessionSearch: 'session:search',
   /** 导出：Markdown 落盘（弹出保存对话框）/ trace 诊断包 */

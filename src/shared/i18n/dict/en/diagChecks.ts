@@ -18,7 +18,8 @@ export const diagChecks: typeof zh = {
   auth: {
     label: 'Sign-in status',
     detailMissing: 'auth.json not found',
-    hintMissing: 'Run `grok login` in a terminal to sign in; the desktop app reuses it automatically.',
+    hintMissing:
+      'Sign in from Settings → Account, or run `grok login` in a terminal; the desktop app reuses it automatically.',
     detailValid: (vars) => `${vars.account} (token valid until ${vars.expiresAt})`,
     detailExpired: (vars) =>
       `${vars.account} (token expired, will auto-refresh; until ${vars.expiresAt})`,

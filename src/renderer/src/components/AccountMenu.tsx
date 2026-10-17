@@ -5,7 +5,7 @@ import { useT, useLocale, LOCALE_OPTIONS, type Locale, type MessageKey } from '.
 import { t as tShared } from '@shared/i18n'
 import { useStore } from '../store'
 import type { BillingQuota, ConnectionState } from '@shared/types'
-import { IconGauge, IconGear, IconGlobe, IconPower } from './Icons'
+import { IconGauge, IconGear, IconGlobe, IconPower, IconUser } from './Icons'
 
 /** 额度档位：≥90% 红色告警，≥75% 橙色提醒 */
 export function quotaLevel(percent: number): 'ok' | 'warn' | 'danger' {
@@ -270,6 +270,20 @@ export default function AccountMenu({
         <IconGear size={15} />
         {t('accountMenu.settings')}
       </button>
+
+      {!account && (
+        <button
+          className="account-menu-item"
+          onClick={() => {
+            setSection('account')
+            onClose()
+          }}
+          role="menuitem"
+        >
+          <IconUser size={15} />
+          {t('accountMenu.login')}
+        </button>
+      )}
 
       <div className="account-menu-sep" />
 

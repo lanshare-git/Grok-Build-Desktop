@@ -24,6 +24,7 @@ export const accountMenu: typeof zh = {
   notLoggedIn: '未ログイン',
   settings: '設定',
   language: '言語',
+  login: 'ログイン',
   logout: 'ログアウト',
   loggingOut: 'ログアウト中…'
 }

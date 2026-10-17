@@ -54,9 +54,12 @@ export const settings = {
     teamDesc: '当前账号所属的团队标识',
     authMode: '鉴权方式',
     authModeDesc: '登录时使用的认证类型',
+    login: '登录',
+    loggingIn: '登录中…',
+    loginHint: '将打开浏览器完成设备码授权；授权完成后桌面端与终端版共用同一份登录态。',
     logout: '退出登录',
     loggingOut: '退出中…',
     loginFailed: (vars: { message: string }) => `登录失败：${vars.message}`,
-    logoutHint: '退出后将清除本地缓存的凭据并重启 agent；如需再次使用，请重新登录（终端执行 grok login）。'
+    logoutHint: '退出后将清除本地缓存的凭据并重启 agent；如需再次使用，请回到本页重新登录。'
   }
 }

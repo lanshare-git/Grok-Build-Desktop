@@ -373,9 +373,15 @@ export function registerIpc(service: AgentService): void {
   )
 
   /* ---------- 登录 ---------- */
-  // grok login 是交互式命令：主进程不给 TTY，因此给出完整原文让用户自行判断下一步
-  ipcMain.handle(CH.login, async (_e, opts?: { oauth?: boolean }): Promise<string> => {
-    const text = await grokLogin(opts)
+  // 默认设备码：边跑边推送输出，并自动打开授权 URL；完成后重启 agent 以加载新凭据
+  ipcMain.handle(CH.login, async (e, opts?: { oauth?: boolean }): Promise<string> => {
+    const text = await grokLogin({
+      oauth: opts?.oauth === true,
+      onLine: (line) => {
+        e.sender.send(CH.pushLoginProgress, line)
+        broadcast(CH.pushLog, `[login] ${line}\n`)
+      }
+    })
     await restartAgentIfNeeded()
     return text
   })

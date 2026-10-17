@@ -210,8 +210,10 @@ export interface GrokDesktopApi {
   /** gc 预览/执行；不传 maxAge 时 grok 不会过期任何 worktree */
   worktreeGc(input?: { maxAge?: string; dryRun?: boolean; cwd?: string }): Promise<string>
 
-  /** 触发 grok 登录流程（等价终端 `grok login`） */
+  /** 触发 grok 登录流程（默认设备码；`oauth: true` 走浏览器 OAuth） */
   login(opts?: { oauth?: boolean }): Promise<string>
+  /** 订阅登录过程输出（设备码、授权 URL 等） */
+  onLoginProgress(cb: (line: string) => void): () => void
 
   /* ---------- 会话工具 ---------- */
   /**
