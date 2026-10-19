@@ -94,6 +94,7 @@ function onIdleFired(sessionId: string): void {
   if (!s.running.includes(sessionId)) return
 
   // 工具还在跑 / 等用户：不是挂死，再等一个空闲窗口
+  //（长命令两批工具之间静默数分钟很常见，不能在这里 cancel）
   if (hasOpenWork(sessionId)) {
     armIdleTimer(sessionId)
     return

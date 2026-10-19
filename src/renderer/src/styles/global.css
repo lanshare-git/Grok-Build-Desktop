@@ -3241,9 +3241,17 @@ a.msg-media-link:hover {
 .dir-menu-item:hover {
   background: var(--bg-subtle, #eef0f3);
 }
+.dir-menu-item.is-current {
+  background: var(--accent-soft, #e8eef8);
+}
 .dir-menu-item > svg {
   flex: none;
   color: var(--text-muted);
+}
+.dir-menu-current {
+  flex: none;
+  font-size: 11px;
+  color: var(--accent, #3b6fd8);
 }
 .dir-menu-label {
   flex: none;

@@ -197,10 +197,26 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     client.on('notification', ({ method, params }) => {
       if (method === 'session/update' && params?.sessionId && params?.update) {
         const sessionId = String(params.sessionId)
+        const rawUpdate = params.update as SessionUpdateEnvelope & {
+          prompt_id?: string
+          stop_reason?: string
+        }
+        // 线上实测：turn_completed 有时走标准 session/update（不是 _x.ai/…）。
+        // 只认 _x.ai 时，磁盘已有终态、UI 仍一直「正在工作」。
+        if (rawUpdate.sessionUpdate === 'turn_completed') {
+          if (!this.replayBuffers.has(sessionId)) {
+            this.emit('turnComplete', {
+              sessionId,
+              promptId: rawUpdate.prompt_id,
+              stopReason: rawUpdate.stop_reason
+            })
+          }
+          return
+        }
         // agentTimestampMs 在 params._meta 上，不在 update 里 —— 不合并的话
         // 渲染层只能 Date.now()，重放历史时气泡时间会变成「打开会话的时刻」
         //（用户看到「代码分析」显示 16:26，磁盘真实发送却是 15:32）。
-        const update = attachAgentTimestamp(params.update as SessionUpdateEnvelope, params._meta)
+        const update = attachAgentTimestamp(rawUpdate, params._meta)
         // 正在 session/load 的会话：先缓存，等加载结束后统一下发
         const buffer = this.replayBuffers.get(sessionId)
         if (buffer) {
@@ -218,9 +234,10 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
           prompt_id?: string
           stop_reason?: string
         }
-        if (update.sessionUpdate === 'turn_completed') {
+        const sessionId = String(params.sessionId)
+        if (update.sessionUpdate === 'turn_completed' && !this.replayBuffers.has(sessionId)) {
           this.emit('turnComplete', {
-            sessionId: String(params.sessionId),
+            sessionId,
             promptId: update.prompt_id,
             stopReason: update.stop_reason
           })
@@ -234,11 +251,14 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
           promptId?: string
           stopReason?: string
         }
-        this.emit('turnComplete', {
-          sessionId: String(p.sessionId),
-          promptId: p.promptId,
-          stopReason: p.stopReason
-        })
+        const sessionId = String(p.sessionId)
+        if (!this.replayBuffers.has(sessionId)) {
+          this.emit('turnComplete', {
+            sessionId,
+            promptId: p.promptId,
+            stopReason: p.stopReason
+          })
+        }
         return
       }
       // grok 的新功能/版本公告（终端里表现为启动横幅），桌面端转发给渲染层展示

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import {
+  bootstrapBlankSession,
   cleanError,
   connectAgent,
   newChatSession,
@@ -11,6 +12,7 @@ import {
   refreshToolCallDensity,
   resumeSession
 } from './actions'
+import { mostRecentWorkspaceCwd } from './utils'
 import ChatView from './components/ChatView'
 import CloseActionDialog from './components/CloseActionDialog'
 import Composer from './components/Composer'
@@ -82,6 +84,13 @@ export default function App(): JSX.Element {
     }
 
     const store = useStore.getState()
+    // 冷启动进空白草稿：persist 水合可能晚于本 effect，两边都调一次（幂等）
+    const bootBlank = (): void => bootstrapBlankSession()
+    bootBlank()
+    const unsubHydration =
+      typeof useStore.persist?.onFinishHydration === 'function'
+        ? useStore.persist.onFinishHydration(bootBlank)
+        : undefined
 
     const unsubscribers = [
       window.grok.onState((e) => {
@@ -171,8 +180,12 @@ export default function App(): JSX.Element {
         const info = await window.grok.appInfo()
         // homeDir 始终指向主目录（homedir）：「纯聊天」会话以此为根，不受默认 cwd 影响。
         // 不进 persist（每次启动重取），避免换机器 / 改用户后残留旧路径。
-        store.setHomeDir(info.defaultCwd)
-        if (!store.cwd) store.setCwd(info.defaultCwd)
+        const st = useStore.getState()
+        st.setHomeDir(info.defaultCwd)
+        const startupCwd =
+          mostRecentWorkspaceCwd(st.sessions) || st.cwd || info.defaultCwd
+        st.setCwd(startupCwd)
+        bootstrapBlankSession(startupCwd)
       } catch {
         /* 忽略：后续 connect 会给出更具体的错误 */
       }
@@ -201,7 +214,10 @@ export default function App(): JSX.Element {
       await useStore.getState().refreshActivity()
     })()
 
-    return () => unsubscribers.forEach((off) => off())
+    return () => {
+      unsubHydration?.()
+      unsubscribers.forEach((off) => off())
+    }
   }, [])
 
   if (bridgeMissing) {

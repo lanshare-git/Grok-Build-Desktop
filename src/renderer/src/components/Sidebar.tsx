@@ -14,6 +14,7 @@ import { useStore } from '../store'
 import {
   basename,
   groupSessionsByWorkspace,
+  isUnsentDraft,
   relativeTime,
   sameDir,
   sessionActivityAt,
@@ -160,8 +161,11 @@ export default function Sidebar(): JSX.Element {
   const hitSnippet = (id: string): string | null =>
     hits?.find((h) => h.sessionId === id && h.where === 'content')?.snippet ?? null
 
-  // 搜索态下只展示命中的会话；分组结构保留，避免整页塌成一张平铺列表
-  const visibleSessions = hitIds ? sessions.filter((s) => hitIds.has(s.id)) : sessions
+  // 搜索态下只展示命中的会话；分组结构保留，避免整页塌成一张平铺列表。
+  // 未发消息的本地草稿不进侧栏（主区仍是空白聊天；首发 materialize 后才出现）。
+  const visibleSessions = (hitIds ? sessions.filter((s) => hitIds.has(s.id)) : sessions).filter(
+    (s) => !isUnsentDraft(s)
+  )
   const groups = useMemo(
     () => groupSessionsByWorkspace(visibleSessions, workspaces, homeDir, locale),
     [visibleSessions, workspaces, homeDir, locale]

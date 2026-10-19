@@ -1,13 +1,13 @@
 import { useRef, useState } from 'react'
 
-import { applyPermissionModeToSession, changeConfigOption, chooseWorkspace } from '../actions'
+import { applyPermissionModeToSession, changeConfigOption } from '../actions'
 import { useLocale, useT } from '../i18n'
 import { useStore } from '../store'
 import { formatNumber, isLockedChat, sessionDisplayTitle } from '../utils'
 import type { PermissionMode } from '@shared/types'
 import { PERMISSION_MODE_OPTIONS } from '@shared/types'
 import DirPickerMenu from './DirPickerMenu'
-import { IconFolder, IconGauge, IconPlus } from './Icons'
+import { IconFolder, IconGauge } from './Icons'
 
 export default function Header(): JSX.Element {
   const t = useT()
@@ -18,12 +18,15 @@ export default function Header(): JSX.Element {
   const setPermissionMode = useStore((s) => s.setPermissionMode)
   const renameSession = useStore((s) => s.renameSession)
   const openUsage = useStore((s) => s.openUsage)
+  // 必须在任何条件 return 之前调用：冷启动会先以 activeId=null 渲染一帧，
+  // 再建空白草稿 —— hooks 数量不能随 session 有无变化（React #310）。
+  const catalog = useStore((s) => s.configOptionCatalog)
 
   const [renaming, setRenaming] = useState(false)
   const [draft, setDraft] = useState('')
-  /** 「+」新建任务的目录选择弹层 */
-  const [dirMenuOpen, setDirMenuOpen] = useState(false)
-  const newTaskRef = useRef<HTMLButtonElement | null>(null)
+  /** 路径 chip：切换工作目录（先列已有，再「打开其他目录」） */
+  const [cwdMenuOpen, setCwdMenuOpen] = useState(false)
+  const pathChipRef = useRef<HTMLButtonElement | null>(null)
 
   if (!session) return <div className="header" />
 
@@ -47,7 +50,6 @@ export default function Header(): JSX.Element {
   }
 
   // 草稿会话自身没有 ACP 下发的选项；用缓存目录兜底，这样新建任务也能选模型
-  const catalog = useStore((s) => s.configOptionCatalog)
   const modelOption =
     session.configOptions.find((o) => (o.configId ?? o.id) === 'model') ??
     catalog.find((o) => (o.configId ?? o.id) === 'model')
@@ -93,14 +95,7 @@ export default function Header(): JSX.Element {
           </div>
         )}
         <button
-          ref={newTaskRef}
-          className="icon-btn"
-          title={t('header.newTaskTitle')}
-          onClick={() => setDirMenuOpen((v) => !v)}
-        >
-          <IconPlus size={13} />
-        </button>
-        <button
+          ref={pathChipRef}
           className="chip chip-path"
           disabled={locked}
           title={
@@ -110,7 +105,7 @@ export default function Header(): JSX.Element {
                 ? t('header.pathTitleChat', { cwd: session.cwd })
                 : t('header.pathTitleTask', { cwd: session.cwd })
           }
-          onClick={() => void chooseWorkspace()}
+          onClick={() => setCwdMenuOpen((v) => !v)}
         >
           <IconFolder size={13} />
           {session.cwd}
@@ -206,8 +201,12 @@ export default function Header(): JSX.Element {
         </button>
       </div>
 
-      {dirMenuOpen && (
-        <DirPickerMenu anchor={newTaskRef.current} onClose={() => setDirMenuOpen(false)} />
+      {cwdMenuOpen && (
+        <DirPickerMenu
+          purpose="switch"
+          anchor={pathChipRef.current}
+          onClose={() => setCwdMenuOpen(false)}
+        />
       )}
     </header>
   )

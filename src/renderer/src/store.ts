@@ -27,7 +27,7 @@ import type {
 } from '@shared/types'
 import { densityExpandsByDefault } from '@shared/types'
 import { resolveLocale, t as tShared, type Locale } from '@shared/i18n'
-import { normalizeDir, toolCallOutput } from './utils'
+import { mostRecentWorkspaceCwd, normalizeDir, toolCallOutput } from './utils'
 import type { AppVersionInfo } from '@shared/api'
 
 const uid = (): string =>
@@ -1261,8 +1261,8 @@ export const useStore = create<AppState>()(
             }),
             commands: []
           }
-          // 对齐 Cursor：侧栏只保留一个空「新任务」，再建时先撤掉其它空草稿
-          // （输入框还有未发送内容的草稿不算空，会保留）
+          // 对齐 Cursor：未发消息的草稿不进侧栏；再建时先撤掉其它空草稿
+          // （输入框还有未发送内容的草稿不算空，会保留，但仍不在侧栏显示）
           const dropped = s.sessions.filter((x) => isDisposableDraft(x, s.running, s.composerDrafts))
           const kept = s.sessions.filter((x) => !isDisposableDraft(x, s.running, s.composerDrafts))
           let composerDrafts = s.composerDrafts
@@ -1835,10 +1835,12 @@ advanceReplayProgress: (sessionId, applied) =>
         // 旧持久化可能残留空草稿；启动时一律丢掉（草稿本就不该落盘）
         const rawSessions = (rest.sessions ?? current.sessions) as SessionMeta[]
         const sessions = rawSessions.filter((x) => !x.isDraft)
-        const activeId =
-          rest.activeId && sessions.some((x) => x.id === rest.activeId)
-            ? rest.activeId
-            : (sessions[0]?.id ?? null)
+        // 冷启动不恢复上次聚焦的会话：进空白草稿（App.bootstrapBlankSession）。
+        // cwd 先校正为最近活动目录，避免首帧仍用过期的全局默认。
+        const cwd =
+          mostRecentWorkspaceCwd(sessions) ||
+          (typeof rest.cwd === 'string' && rest.cwd ? normalizeDir(rest.cwd) : '') ||
+          current.cwd
         const catalog =
           (rest.configOptionCatalog && rest.configOptionCatalog.length > 0
             ? rest.configOptionCatalog
@@ -1847,7 +1849,8 @@ advanceReplayProgress: (sessionId, applied) =>
           ...current,
           ...rest,
           sessions,
-          activeId,
+          activeId: null,
+          cwd,
           configOptionCatalog: catalog,
           preferredModel: rest.preferredModel ?? current.preferredModel,
           preferredEffort: rest.preferredEffort ?? current.preferredEffort,

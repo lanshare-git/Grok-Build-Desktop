@@ -30,8 +30,11 @@ export const sessionTools: typeof zh = {
 
   dir: {
     title: '作業ディレクトリを選択',
-    empty: '最近使用したディレクトリがありません。作業ディレクトリを追加してください',
-    browse: '作業ディレクトリを追加…'
+    switchTitle: '作業ディレクトリを切り替え',
+    empty: '最近使用したディレクトリがありません。別のディレクトリを開いてください',
+    browse: '作業ディレクトリを追加…',
+    browseOther: '別のディレクトリを開く…',
+    current: '現在'
   },
 
   /** WorkspaceToolsMenu：作業ディレクトリ行の「その他」メニュー */

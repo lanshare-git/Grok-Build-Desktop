@@ -25,7 +25,7 @@ export function onAgentTurnCompleted(sessionId: string): void {
   s.setRunning(sessionId, false)
   s.markStuckTools(sessionId)
 }
-import { isLockedChat, sameDir } from './utils'
+import { isLockedChat, mostRecentWorkspaceCwd, sameDir } from './utils'
 import type {
   CloseAction,
   DesktopPermToastMode,
@@ -196,24 +196,31 @@ export async function chooseCwd(): Promise<string | null> {
 }
 
 /**
- * 切换工作目录（顶栏路径按钮）。
+ * 切换到指定工作目录（顶栏路径 chip / 目录菜单）。
  *
  * 会话的工作目录在 `session/new` 时就定死了，ACP 之后没有「改目录」这回事
  * （grok 甚至按 cwd 分目录存放会话：~/.grok/sessions/<编码后的 cwd>/<sessionId>，
  *  用别的 cwd 去 session/load 会到另一个目录里找，直接找不到）。
  * 所以「换目录」只能靠新建会话实现，并且要明说清楚，避免用户以为当前会话已切过去。
+ *
+ * `dir` 有值：直接切到该目录（已有工作空间点选）。
+ * `dir` 缺省：弹出系统目录选择框（要新目录时才走这条）。
  */
-export async function chooseWorkspace(): Promise<void> {
+export async function switchWorkspace(dir?: string): Promise<void> {
   const store = useStore.getState()
   const current = store.activeSession()
 
-  const dir = await window.grok.pickDirectory()
-  if (!dir) return
+  let target = dir
+  if (!target) {
+    const picked = await window.grok.pickDirectory()
+    if (!picked) return
+    target = picked
+  }
 
-  useStore.getState().setCwd(dir)
+  useStore.getState().setCwd(target)
 
-  if (current && sameDir(current.cwd, dir)) {
-    store.appendNotice(current.id, `当前会话已经以 ${dir} 为工作目录。`, 'info')
+  if (current && sameDir(current.cwd, target)) {
+    store.appendNotice(current.id, `当前会话已经以 ${target} 为工作目录。`, 'info')
     return
   }
 
@@ -226,7 +233,7 @@ export async function chooseWorkspace(): Promise<void> {
       ? current.id
       : null
 
-  await newSession(dir)
+  await newSession(target)
 
   const after = useStore.getState()
   // 新建失败（连接异常）就保留现场，先把错误暴露出来
@@ -234,7 +241,35 @@ export async function chooseWorkspace(): Promise<void> {
   if (emptyPrevId) after.deleteSession(emptyPrevId)
 
   const active = useStore.getState().activeSession()
-  if (active) useStore.getState().appendNotice(active.id, `已切换到工作目录 ${dir}。`, 'info')
+  if (active) useStore.getState().appendNotice(active.id, `已切换到工作目录 ${target}。`, 'info')
+}
+
+/**
+ * 冷启动：进入空白草稿聊天，工作目录取最近活动会话的 cwd（否则全局 cwd / 主目录）。
+ * 幂等——已是目标目录下的空草稿则只校正 cwd，不重复建。
+ */
+export function bootstrapBlankSession(cwd?: string): void {
+  const store = useStore.getState()
+  const target =
+    (cwd && cwd.trim()) ||
+    mostRecentWorkspaceCwd(store.sessions) ||
+    store.cwd ||
+    store.homeDir
+  if (!target) return
+
+  if (!sameDir(store.cwd, target)) store.setCwd(target)
+
+  const active = store.activeSession()
+  if (
+    active?.isDraft &&
+    sameDir(active.cwd, target) &&
+    active.items.length === 0 &&
+    active.kind !== 'chat'
+  ) {
+    return
+  }
+
+  store.createDraftSession({ cwd: target, permissionMode: store.permissionMode })
 }
 
 /**
@@ -440,8 +475,9 @@ export async function sendPrompt(text: string, images?: ImageAttachment[]): Prom
       .appendNotice(activeId, `请求失败：${cleanError(err)}`, 'error')
   } finally {
     const s = useStore.getState()
-    const target = s.activeId ?? activeId
-    s.finalizeSession(target)
+    // ⚠️ 必须用本轮 sessionId（activeId），不能用当前前台 activeId：
+    // 生成途中切走会话时，清错 running 会让原会话永远「正在工作」。
+    s.finalizeSession(activeId)
     // 空闲自动 cancel：等 prompt 真正返回再提示；中途又有 update 则 pending 已清，不贴。
     if (consumeIdleCancelled(activeId)) {
       s.appendNotice(activeId, tShared(s.locale, 'chat.turnIdleCancelled'), 'warn')
@@ -454,19 +490,17 @@ export async function sendPrompt(text: string, images?: ImageAttachment[]): Prom
     } else {
       activeTurns.delete(activeId)
       noteTurnEnded(activeId)
-      s.setRunning(target, false)
+      s.setRunning(activeId, false)
       // 客户端兜底：回合已结束（正常返回 / 报错 / 超时 / 被 ■ 中断），
       // 但仍有工具卡停在 in_progress —— agent **不会**补发终态
       //（scripts/cancel-tool-probe.mjs 实测：cancel 后再观察 60s 仍是 in_progress）。
       // 不兜底那张卡就永远转圈。标成 interrupted（语义：没收到结果，不是执行失败）。
       // ⚠️ 只在**没有任何在飞回合**时才标：排队发送的下一轮可能刚起了工具。
-      // 兜底对象用 activeId（这一轮真正属于的会话）而不是 target ——
-      // 生成途中切到别的会话时 target 是别人，扫错了会话。
       s.markStuckTools(activeId)
     }
     // 回合结束后用磁盘真值刷新活动时间：本轮确实产生了内容，grok 已把
     // turn_ended 等事件写进 events.jsonl，这是真实的重放安全的排序依据。
-    void s.refreshActivity([target])
+    void s.refreshActivity([activeId])
   }
 }
 

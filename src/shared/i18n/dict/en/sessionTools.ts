@@ -30,8 +30,11 @@ export const sessionTools: typeof zh = {
 
   dir: {
     title: 'Choose a working directory',
-    empty: 'No recent directories — add a workspace first',
-    browse: 'Add workspace…'
+    switchTitle: 'Switch working directory',
+    empty: 'No recent directories — open another directory',
+    browse: 'Add workspace…',
+    browseOther: 'Open another directory…',
+    current: 'Current'
   },
 
   /** WorkspaceToolsMenu: the "more" menu on a workspace row */

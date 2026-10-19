@@ -14,9 +14,9 @@ export const header: typeof zh = {
   pathTitleLocked:
     'Chat sessions are rooted at the home directory and cannot switch directories; create a normal task to use another working directory',
   pathTitleChat: (vars: { cwd: string }) =>
-    `Working directory: ${vars.cwd}\nClicking to choose a directory will CREATE a new task in it; the current session stays unchanged`,
+    `Working directory: ${vars.cwd}\nClick to switch from existing workspaces or open another directory; switching CREATES a new task, the current session stays unchanged`,
   pathTitleTask: (vars: { cwd: string }) =>
-    `Working directory: ${vars.cwd}\nClicking to choose a directory will CREATE a new task in it; the current session stays unchanged\nTo change this session's own directory: use "Move to working directory" in the "☰" menu on the session row (sessions currently generating cannot be moved)`,
+    `Working directory: ${vars.cwd}\nClick to switch from existing workspaces or open another directory; switching CREATES a new task, the current session stays unchanged\nTo change this session's own directory: use "Move to working directory" in the "☰" menu on the session row (sessions currently generating cannot be moved)`,
   model: 'Model',
   effort: 'Reasoning effort',
   modeTitleLocked: 'Chat session is locked read-only (plan mode) and cannot be changed',

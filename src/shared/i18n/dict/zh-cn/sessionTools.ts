@@ -24,11 +24,14 @@ export const sessionTools = {
   unloadFailed: (vars: { message: string }) => `卸载失败：${vars.message}`,
   unknownError: '未知错误',
 
-  /** DirPickerMenu：新建任务的目录选择弹层 */
+  /** DirPickerMenu：新建任务 / 切换工作目录的目录选择弹层 */
   dir: {
     title: '选择工作目录',
-    empty: '暂无最近目录，请添加工作目录',
-    browse: '添加工作目录…'
+    switchTitle: '切换工作目录',
+    empty: '暂无最近目录，请打开其他目录',
+    browse: '添加工作目录…',
+    browseOther: '打开其他目录…',
+    current: '当前'
   },
 
   /** WorkspaceToolsMenu：工作目录行的「更多」菜单 */

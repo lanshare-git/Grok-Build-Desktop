@@ -53,6 +53,27 @@ export function sessionActivityAt(session: SessionMeta): number {
   return session.activityAt ?? session.updatedAt
 }
 
+/**
+ * 尚未发过消息的本地草稿（侧栏不展示，对齐 Cursor「New Agent」）。
+ * 输入框有未发送内容也不进列表——真正首发 materialize 后才出现。
+ */
+export function isUnsentDraft(session: SessionMeta): boolean {
+  return !!session.isDraft && session.items.length === 0
+}
+
+/**
+ * 最近一次活动的工作目录：按会话活动时间取最新非草稿会话的 cwd。
+ * 冷启动空白聊天用它作默认根目录。
+ */
+export function mostRecentWorkspaceCwd(sessions: readonly SessionMeta[]): string | null {
+  let best: SessionMeta | null = null
+  for (const session of sessions) {
+    if (session.isDraft || !session.cwd) continue
+    if (!best || sessionActivityAt(session) > sessionActivityAt(best)) best = session
+  }
+  return best ? normalizeDir(best.cwd) : null
+}
+
 /** 侧栏的一个工作目录分组 */
 export interface WorkspaceGroup {
   /** 规范小写后的路径，用作 React key 与折叠状态 */
