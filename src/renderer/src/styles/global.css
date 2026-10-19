@@ -326,12 +326,12 @@ pre {
   --row-bg: var(--bg-raised);
 }
 
-/* 需要用户响应的会话：左侧琥珀色高亮条，即使在折叠分组里也能一眼看到 */
+/* 需要用户响应的会话：左侧蓝色高亮条，即使在折叠分组里也能一眼看到 */
 .session-item.is-pending {
-  box-shadow: inset 3px 0 0 var(--warn);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 .session-item.is-pending.is-active {
-  box-shadow: var(--shadow-sm), inset 3px 0 0 var(--warn);
+  box-shadow: var(--shadow-sm), inset 3px 0 0 var(--accent);
 }
 
 .session-item-main {
@@ -357,14 +357,15 @@ pre {
   height: 8px;
   border-radius: 50%;
 }
+/* 输出中 = 橙；待响应 = 蓝（与常见「蓝=需关注/未处理」直觉对齐） */
 .session-dot.status-running {
-  background: var(--accent);
-  animation: dot-pulse 1.1s ease-in-out infinite;
-}
-.session-dot.status-pending {
   background: var(--warn);
   box-shadow: 0 0 0 3px var(--warn-soft);
   animation: dot-pulse-warn 1.3s ease-in-out infinite;
+}
+.session-dot.status-pending {
+  background: var(--accent);
+  animation: dot-pulse 1.1s ease-in-out infinite;
 }
 .session-dot.status-done {
   background: var(--text-muted);
@@ -399,12 +400,12 @@ pre {
   border-radius: 999px;
 }
 .session-status-tag.status-running {
-  color: var(--accent);
-  background: var(--accent-soft);
-}
-.session-status-tag.status-pending {
   color: var(--warn);
   background: var(--warn-soft);
+}
+.session-status-tag.status-pending {
+  color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .session-item-title-row {
