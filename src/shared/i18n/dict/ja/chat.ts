@@ -10,5 +10,19 @@ export const chat: typeof zh = {
   readyLine1: 'セッションの準備ができました。やりたいことを入力してください。',
   readyLine2:
     'Agent はファイルの読み書き、コマンド実行、コード検索ができます。ターミナル版 Grok Build と同等の能力です。',
-  agentWorking: 'Agent が作業中…'
+  agentWorking: 'Agent が作業中…',
+  turnIdleCancelled:
+    '5 分以上出力がないため、このターンを自動終了しました。続けてメッセージを送るか、■ で停止して再試行してください。',
+  longShotPickHint: '起点にするメッセージをクリックすると、末尾まで長截図します',
+  longShotFromTop: '現在の上端から',
+  longShotFromStart: '会話の先頭から',
+  longShotCancel: 'キャンセル',
+  longShotCapturing: '長截図を作成中…',
+  longShotDone: (vars: { path?: string }) =>
+    vars.path
+      ? `長截図をクリップボードにコピーし、${vars.path} に保存しました`
+      : '長截図をクリップボードにコピーしました',
+  longShotDoneClipboardOnly: '長截図をクリップボードにコピーしました（ファイルは未保存）',
+  longShotFailed: (vars: { message: string }) => `長截図に失敗しました：${vars.message}`,
+  longShotTruncated: '内容が長すぎるため、起点から約 16000px までを截図しました'
 }

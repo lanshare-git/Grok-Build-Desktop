@@ -10,10 +10,15 @@
  * 根治办法：不再猜，直接读 grok 自己写下的时间。落盘结构：
  *   ~/.grok/sessions/<encodeURIComponent(cwd)>/<sessionId>/events.jsonl
  * 每条事件形如 `{"ts":"2026-10-12T08:26:57.768Z","type":"turn_ended",...}`，
- * 取最后一条的 `ts` 即该会话最后一次真实回合时间。
+ * 取最后一条**回合类**事件的 `ts`。
  *
  * ⚠️ 绝对不要退化成用文件 mtime：重放/启动时 grok 会重写 chat_history.jsonl，
  *    mtime 会变成「现在」（实测重放后 mtime = 当前时刻），正是要修的那个 bug。
+ *
+ * ⚠️ 也不能取「文件末条任意事件」：`session/load` 会把 MCP 启停写进同一文件
+ *   （`mcp_server_starting` / `mcp_init_completed` 等），末条 ts 就是「刚才点开的时间」
+ *   （2026-10-19 实证：一串会话侧栏同时显示「36 分钟前」——只是批量点开看过）。
+ *   只认 `turn_started` / `turn_ended`。
  */
 import { createReadStream, existsSync, statSync } from 'node:fs'
 import { join } from 'node:path'
@@ -57,15 +62,20 @@ export function encodeSessionDir(cwd: string): string {
 }
 
 /**
- * 读取文件末尾至多 64KB，从中取最后一个 `"ts":"…"` —— 避免整文件读取
+ * 读取文件末尾至多 256KB，从中取最后一条**回合类**事件的 ts —— 避免整文件读取。
+ * 256KB：频繁点开会在末尾堆 mcp_*，64KB 偶发把更早的 turn_* 挤出窗口。
  */
-const TAIL_BYTES = 64 * 1024
+const TAIL_BYTES = 256 * 1024
 
-const TS_RE = /"ts"\s*:\s*"([^"]+)"/g
+/** 只有这些才算「真有会话活动」；打开/重连写的 mcp_*、phase_changed 等一律忽略 */
+const ACTIVITY_TYPES = new Set(['turn_ended', 'turn_started'])
+
+const LINE_TS_RE = /"ts"\s*:\s*"([^"]+)"/
+const LINE_TYPE_RE = /"type"\s*:\s*"([^"]+)"/
 
 /**
- * 取 events.jsonl 尾部的最后一条事件时间。
- * 返回 ms 时间戳；文件不存在、为空或没有可解析的 ts 时返回 0。
+ * 取 events.jsonl 尾部最后一条回合事件时间。
+ * 返回 ms 时间戳；文件不存在、为空或没有回合事件时返回 0。
  */
 async function readLastEventTs(eventsPath: string): Promise<number> {
   try {
@@ -85,12 +95,19 @@ async function readLastEventTs(eventsPath: string): Promise<number> {
       const nl = text.indexOf('\n')
       if (nl !== -1) text = text.slice(nl + 1)
     }
-    let last = 0
-    for (const m of text.matchAll(TS_RE)) {
-      const t = Date.parse(m[1])
-      if (!Number.isNaN(t)) last = t
+    // 从后往前找：末尾常是 mcp_init_*（点开写的），真正的回合在它们前面
+    const lines = text.split('\n')
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i]
+      if (!line) continue
+      const typeM = LINE_TYPE_RE.exec(line)
+      if (!typeM || !ACTIVITY_TYPES.has(typeM[1])) continue
+      const tsM = LINE_TS_RE.exec(line)
+      if (!tsM) continue
+      const t = Date.parse(tsM[1])
+      if (!Number.isNaN(t)) return t
     }
-    return last
+    return 0
   } catch {
     return 0
   }

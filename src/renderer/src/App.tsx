@@ -49,8 +49,29 @@ function notifyBackgroundPrompt(
 
 export default function App(): JSX.Element {
   const activeId = useStore((s) => s.activeId)
+  const unreadSessionIds = useStore((s) => s.unreadSessionIds)
+  const permissions = useStore((s) => s.permissions)
+  const questions = useStore((s) => s.questions)
   const showCloseActionPrompt = useStore((s) => s.showCloseActionPrompt)
   const [bridgeMissing, setBridgeMissing] = useState(false)
+
+  // 告诉主进程当前在看哪个会话：已打开该会话的内联授权时，自动收起桌面浮窗
+  useEffect(() => {
+    if (!window.grok?.reportActiveSession) return
+    void window.grok.reportActiveSession(activeId)
+  }, [activeId])
+
+  // 任务栏角标（对齐 Cursor）：橙=要你处理，蓝=做完未读
+  useEffect(() => {
+    if (!window.grok?.reportTaskbarBadge) return
+    const kind =
+      permissions.length > 0 || questions.length > 0
+        ? 'pending'
+        : unreadSessionIds.length > 0
+          ? 'unread'
+          : 'none'
+    void window.grok.reportTaskbarBadge(kind)
+  }, [permissions.length, questions.length, unreadSessionIds])
 
   useEffect(() => {
     // preload 未注入时（脚本加载失败等）给出明确提示，而不是抛一堆 undefined 错误
@@ -98,20 +119,18 @@ export default function App(): JSX.Element {
         } else if (e.state === 'ready') {
           st.dismissToast('conn-error')
           st.dismissToast('conn-stopped')
+          // 缓存里能看到历史，但会话尚未 session/load。不在这里补加载的话，
+          // 用户一发消息就会触发清空+重放，刚发出的内容看起来像消失了。
+          const active = st.activeSession()
+          if (active && !active.isDraft && !st.loadedSessions.includes(active.id)) {
+            void resumeSession(active.id, active.cwd)
+          }
         }
       }),
       window.grok.onStream((e) => enqueueStreamEvent(e)),
       window.grok.onPermission((e) => {
-        const st = useStore.getState()
-        st.setPermission(e)
-        // 请求归属的任务不是当前正在看的那个 → 用右下角提示引导；否则就地内联展示
-        if (e.sessionId !== st.activeId) {
-          notifyBackgroundPrompt(e.sessionId, {
-            requestId: e.requestId,
-            kind: 'perm',
-            label: e.toolCall?.title ?? e.toolCall?.toolName ?? '一个工具'
-          })
-        }
+        // 授权提醒改走主进程桌面浮窗（可直接点按钮）；当前会话前台只靠内联面板
+        useStore.getState().setPermission(e)
       }),
       window.grok.onQuestion((e) => {
         const st = useStore.getState()
@@ -131,6 +150,10 @@ export default function App(): JSX.Element {
       window.grok.onFocusSession(({ sessionId }) => {
         const session = useStore.getState().sessions.find((x) => x.id === sessionId)
         if (session) void resumeSession(session.id, session.cwd)
+      }),
+      // 桌面授权浮窗（或其它窗口）已点选：清掉本窗口里残留的授权卡与 toast
+      window.grok.onPermissionSettled(({ requestId }) => {
+        useStore.getState().clearPermission(requestId)
       }),
       // 语言广播：任一窗口/入口切换后同步本窗口缓存；
       // 诊断报告由主进程按当前语言生成（快照），切语言后必须重拉，否则面板残留旧语言文案

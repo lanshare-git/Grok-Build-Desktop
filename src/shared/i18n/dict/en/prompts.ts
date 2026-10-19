@@ -27,6 +27,7 @@ export const prompts: typeof zh = {
   },
   toast: {
     reconnect: 'Reconnect',
-    goHandle: 'Handle it'
+    goHandle: 'Handle it',
+    openApp: 'Open app'
   }
 }

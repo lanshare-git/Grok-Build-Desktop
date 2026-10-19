@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
 
 import { editAndResend } from '../actions'
 import { useLocale, useT, type Locale } from '../i18n'
+import { captureLongShotFromElement } from '../long-shot'
 import { useStore } from '../store'
+import { sessionDisplayTitle } from '../utils'
 import type { ChatItem, ImageAttachment, MediaAttachment } from '@shared/types'
 
 type ToolItem = Extract<ChatItem, { kind: 'tool' }>
@@ -13,6 +15,9 @@ import ToolCallCard from './ToolCallCard'
 import ToolGroupCard from './ToolGroupCard'
 import { densityGroupsTools } from '@shared/types'
 import { IconCopy, IconEdit } from './Icons'
+
+/** selector 空态必须稳定引用，否则每次渲染都是新数组 → zustand 无限重渲染 */
+const EMPTY_PENDING: Extract<ChatItem, { kind: 'user' }>[] = []
 
 /** 09:20 样式的短时间戳 */
 const formatTime = (at: number, locale: Locale): string =>
@@ -208,6 +213,9 @@ export default function ChatView(): JSX.Element {
   // 正在 session/load 重放历史：此时 items 被清空，若不管就会显示 welcome 文案，
   // 等于谎称「会话已就绪」。超大会话重放要好几秒，这个假文案会一直挂着。
   const reloading = useStore((s) => s.reloadingSessions.includes(s.activeId ?? ''))
+  const longShotPicking = useStore(
+    (s) => !!s.activeId && s.longShotPickSessionId === s.activeId
+  )
   /**
    * 重放进度比例（0~1），用于画顶部那条 2px 细线；null = 总数未知 → 画往复动画。
    * ⚠️ 必须返回**数字或 null**（原始值），不能返回对象：
@@ -221,11 +229,22 @@ export default function ChatView(): JSX.Element {
   })
   const scrollerRef = useRef<HTMLDivElement>(null)
   const pinnedRef = useRef(true)
+  const pendingUser = useStore((s) => {
+    const id = s.activeId
+    if (!id) return EMPTY_PENDING
+    return s.pendingUserMessages[id] ?? EMPTY_PENDING
+  })
 
   // 当前正在编辑的用户消息 id；同一时间只允许编辑一条
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [longShotBusy, setLongShotBusy] = useState(false)
 
-  const rawItems = session?.items ?? []
+  const sessionItems = session?.items ?? []
+  const rawItems = useMemo(() => {
+    if (pendingUser.length === 0) return sessionItems
+    const ids = new Set(pendingUser.map((p) => p.id))
+    return [...sessionItems.filter((it) => !ids.has(it.id)), ...pendingUser]
+  }, [sessionItems, pendingUser])
   // 「紧凑 + 分组 / 最紧凑」档：把**连续的同种**工具调用折成一张汇总卡（grok 1.0.52 同义行为）。
   // 必须在渲染前做，且用 useMemo 缓存 —— 否则每次 keystroke 都会重扫几百条 items。
   const groupTools = useStore((s) => densityGroupsTools(s.toolCallDensity))
@@ -275,8 +294,140 @@ export default function ChatView(): JSX.Element {
     void editAndResend(itemId, text, images)
   }
 
+  const runLongShot = async (startEl: HTMLElement): Promise<void> => {
+    const scroller = scrollerRef.current
+    if (!scroller || !session) return
+    useStore.getState().cancelLongShotPick()
+    setLongShotBusy(true)
+    // 等选点条卸掉再截，避免条带进画面
+    await new Promise<void>((r) => requestAnimationFrame(() => r()))
+    try {
+      const result = await captureLongShotFromElement(scroller, startEl)
+      const title = sessionDisplayTitle(session, locale)
+      const saved = await window.grok.saveLongShotPng({
+        png: result.png,
+        defaultName: `${title || 'session'}-long-shot`
+      })
+      if (result.truncated) {
+        useStore.getState().pushToast({
+          level: 'warn',
+          title: t('chat.longShotTruncated'),
+          text: '',
+          ttl: 6000
+        })
+      }
+      if (saved.path) {
+        useStore.getState().pushToast({
+          level: 'info',
+          title: t('chat.longShotDone', { path: saved.path }),
+          text: '',
+          ttl: 5000
+        })
+        void window.grok.revealPath(saved.path)
+      } else if (saved.clipboard) {
+        useStore.getState().pushToast({
+          level: 'info',
+          title: t('chat.longShotDoneClipboardOnly'),
+          text: '',
+          ttl: 4000
+        })
+      } else {
+        useStore.getState().pushToast({
+          level: 'error',
+          title: t('chat.longShotFailed', { message: t('sessionTools.unknownError') }),
+          text: '',
+          ttl: 5000
+        })
+      }
+    } catch (err) {
+      useStore.getState().pushToast({
+        level: 'error',
+        title: t('chat.longShotFailed', {
+          message: err instanceof Error ? err.message : String(err)
+        }),
+        text: '',
+        ttl: 6000
+      })
+    } finally {
+      setLongShotBusy(false)
+    }
+  }
+
+  const onChatClick = (e: MouseEvent<HTMLDivElement>): void => {
+    if (!longShotPicking || longShotBusy) return
+    const target = (e.target as HTMLElement | null)?.closest?.('[data-long-shot-target]')
+    if (!target || !(target instanceof HTMLElement)) return
+    e.preventDefault()
+    e.stopPropagation()
+    void runLongShot(target)
+  }
+
+  const chatClass = [
+    'chat',
+    longShotPicking ? 'is-long-shot-picking' : '',
+    longShotBusy ? 'is-long-shot-capturing' : ''
+  ]
+    .filter(Boolean)
+    .join(' ')
+
   return (
-    <div className="chat" ref={scrollerRef} onScroll={handleScroll}>
+    <div className={chatClass} ref={scrollerRef} onScroll={handleScroll} onClick={onChatClick}>
+      {longShotPicking && !longShotBusy && (
+        <div className="long-shot-bar" role="status">
+          <span className="long-shot-bar-hint">{t('chat.longShotPickHint')}</span>
+          <div className="long-shot-bar-actions">
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={(e) => {
+                e.stopPropagation()
+                const inner = scrollerRef.current?.querySelector('.chat-inner')
+                const first = inner?.querySelector('[data-long-shot-target]')
+                if (first instanceof HTMLElement) void runLongShot(first)
+              }}
+            >
+              {t('chat.longShotFromStart')}
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={(e) => {
+                e.stopPropagation()
+                const scroller = scrollerRef.current
+                if (!scroller) return
+                // 造一个虚拟起点：当前可视区顶部对应的内容位置
+                const probe = document.createElement('div')
+                probe.style.position = 'absolute'
+                probe.style.left = '0'
+                probe.style.width = '1px'
+                probe.style.height = '1px'
+                probe.style.top = `${scroller.scrollTop}px`
+                probe.style.pointerEvents = 'none'
+                const inner = scroller.querySelector('.chat-inner')
+                if (!inner) return
+                ;(inner as HTMLElement).style.position = 'relative'
+                inner.appendChild(probe)
+                void runLongShot(probe).finally(() => {
+                  probe.remove()
+                })
+              }}
+            >
+              {t('chat.longShotFromTop')}
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={(e) => {
+                e.stopPropagation()
+                useStore.getState().cancelLongShotPick()
+              }}
+            >
+              {t('chat.longShotCancel')}
+            </button>
+          </div>
+        </div>
+      )}
+      {/* 截取中不在 chat 里挂提示条——会进截图像；用光标 wait + 标题即可 */}
       <div className="chat-inner">
         {/*
           重放指示：**只有一条 2px 细进度线**，不要文字、不用 spinner、不加边框。
@@ -318,7 +469,7 @@ export default function ChatView(): JSX.Element {
                 )
               }
               return (
-                <div key={item.id} className="msg msg-user">
+                <div key={item.id} className="msg msg-user" data-long-shot-target="">
                   <div className="user-col">
                     <div className="bubble">
                       {item.images && item.images.length > 0 && (
@@ -359,7 +510,7 @@ export default function ChatView(): JSX.Element {
             case 'assistant': {
               const media = item.media && item.media.length > 0 ? item.media : extractEmbeddedMedia(item.text)
               return (
-                <div key={item.id} className="msg msg-assistant">
+                <div key={item.id} className="msg msg-assistant" data-long-shot-target="">
                   <Markdown text={item.text} />
                   {media.length > 0 && <MediaView media={media} />}
                   {item.streaming && <span className="caret" />}
@@ -367,21 +518,41 @@ export default function ChatView(): JSX.Element {
               )
             }
             case 'thinking':
-              return <ThinkingBlock key={item.id} item={item} />
+              return (
+                <div key={item.id} data-long-shot-target="">
+                  <ThinkingBlock item={item} />
+                </div>
+              )
             case 'tool':
-              return <ToolCallCard key={item.id} item={item} />
+              return (
+                <div key={item.id} data-long-shot-target="">
+                  <ToolCallCard item={item} />
+                </div>
+              )
             case 'tool-group':
               // 只有一张时退回普通卡片，避免为单次调用平白多一层壳
               return item.items.length > 1 ? (
-                <ToolGroupCard key={item.id} items={item.items} />
+                <div key={item.id} data-long-shot-target="">
+                  <ToolGroupCard items={item.items} />
+                </div>
               ) : (
-                <ToolCallCard key={item.items[0].id} item={item.items[0]} />
+                <div key={item.items[0].id} data-long-shot-target="">
+                  <ToolCallCard item={item.items[0]} />
+                </div>
               )
             case 'plan':
-              return <PlanPanel key={item.id} item={item} />
+              return (
+                <div key={item.id} data-long-shot-target="">
+                  <PlanPanel item={item} />
+                </div>
+              )
             case 'notice':
               return (
-                <div key={item.id} className={`notice notice-${item.level}`}>
+                <div
+                  key={item.id}
+                  className={`notice notice-${item.level}`}
+                  data-long-shot-target=""
+                >
                   {item.text}
                 </div>
               )
@@ -390,7 +561,7 @@ export default function ChatView(): JSX.Element {
           }
         })}
 
-        {running && (
+        {running && !longShotBusy && (
           <div className="running-row">
             <span className="spinner" />
             <span>{t('chat.agentWorking')}</span>

@@ -1,10 +1,11 @@
 import { join } from 'node:path'
-import { app, BrowserWindow, protocol, shell } from 'electron'
+import { app, BrowserWindow, Menu, protocol, shell } from 'electron'
 
 import { AgentService } from './acp/service'
 import { registerIpc } from './ipc'
 import { registerAssetProtocol } from './assets'
 import { bindAttention } from './attention'
+import { bindTaskbarBadge } from './taskbar-badge'
 import { createTray, interceptClose, markQuitting } from './tray'
 import { initLocale } from './i18n'
 
@@ -34,7 +35,6 @@ function createWindow(): void {
     minWidth: 900,
     minHeight: 600,
     show: false,
-    autoHideMenuBar: true,
     backgroundColor: '#ffffff',
     icon: iconPath(),
     title: 'Grok Build Desktop',
@@ -106,10 +106,13 @@ if (!gotTheLock) {
   app.whenReady().then(() => {
     // 初始化主进程语言（托盘/诊断等主进程文案依赖它），要在 createTray 之前
     initLocale()
+    // 去掉 Electron 默认 File/Edit/View 菜单；否则 Windows 上按 Alt 会临时弹出
+    Menu.setApplicationMenu(null)
     registerAssetProtocol()
     registerIpc(service)
     createWindow()
     bindAttention(mainWindow!)
+    bindTaskbarBadge(mainWindow!)
     createTray(mainWindow!, service)
 
     app.on('activate', () => {

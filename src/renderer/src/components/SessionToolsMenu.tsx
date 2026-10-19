@@ -1,11 +1,16 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 
-import { closeAgentSession, exportSessionMarkdown, exportSessionTrace } from '../actions'
+import {
+  closeAgentSession,
+  exportSessionMarkdown,
+  exportSessionTrace,
+  resumeSession
+} from '../actions'
 import { useT } from '../i18n'
 import { useStore } from '../store'
 import { sessionDisplayTitle } from '../utils'
 import type { SessionMeta } from '@shared/types'
-import { IconDownload, IconFile, IconFolder, IconPower, IconTrash } from './Icons'
+import { IconDownload, IconFile, IconFolder, IconLongShot, IconPower, IconTrash } from './Icons'
 
 /** 「移动到工作目录」的候选目标 */
 export interface MoveTarget {
@@ -110,6 +115,27 @@ export default function SessionToolsMenu({
     }
   }
 
+  const doLongShot = async (): Promise<void> => {
+    setBusy('longShot')
+    setNote(null)
+    try {
+      // 必须先打开该会话：长截屏画的是 ChatView 里正在显示的内容
+      if (useStore.getState().activeId !== session.id) {
+        await resumeSession(session.id, session.cwd)
+      }
+      useStore.getState().beginLongShotPick(session.id)
+      onClose()
+    } catch (err) {
+      setNote(
+        t('sessionTools.failed', {
+          message: err instanceof Error ? err.message : String(err)
+        })
+      )
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const doTrace = async (): Promise<void> => {
     setBusy('trace')
     setNote(null)
@@ -153,6 +179,19 @@ export default function SessionToolsMenu({
       >
         <IconFile size={15} />
         {busy === 'export' ? t('sessionTools.exporting') : t('sessionTools.exportMarkdown')}
+      </button>
+
+      <button
+        className="account-menu-item"
+        role="menuitem"
+        disabled={busy !== null || session.isDraft}
+        title={
+          session.isDraft ? t('sessionTools.traceTitleDraft') : t('sessionTools.longShotTitle')
+        }
+        onClick={() => void doLongShot()}
+      >
+        <IconLongShot size={15} />
+        {busy === 'longShot' ? t('chat.longShotCapturing') : t('sessionTools.longShot')}
       </button>
 
       <button

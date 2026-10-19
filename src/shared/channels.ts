@@ -34,6 +34,13 @@ export const CH = {
   /** 把会话的落盘目录搬到另一个工作目录下（grok 没有「改会话工作目录」的接口，只能搬目录） */
   sessionMoveData: 'session:move-data',
   screenshotSnip: 'app:screenshot-snip',
+  /**
+   * 截取当前窗口某一矩形区域为 PNG（DIP 坐标，相对窗口客户区）。
+   * 给会话「长截屏」滚屏拼图用。
+   */
+  capturePageRect: 'app:capture-page-rect',
+  /** 把 PNG 写入剪贴板，并可选弹出另存为对话框 */
+  saveLongShotPng: 'app:save-long-shot-png',
   /** 把 grok 下发的媒体地址（file://、本地绝对路径、http(s)、data:）归一化为可加载的 URL */
   assetResolve: 'asset:resolve',
 
@@ -99,6 +106,10 @@ export const CH = {
   deletePurgeDefaultGet: 'config:delete-purge-default-get',
   deletePurgeDefaultSet: 'config:delete-purge-default-set',
 
+  /* 屏幕右下角桌面授权浮窗 */
+  desktopPermToastGet: 'config:desktop-perm-toast-get',
+  desktopPermToastSet: 'config:desktop-perm-toast-set',
+
   /* 账号：读取当前登录信息 / 退出登录 */
   accountGet: 'account:get',
   accountLogout: 'account:logout',
@@ -119,6 +130,18 @@ export const CH = {
   pushMeta: 'push:meta',
   /** 系统通知被点击：请渲染层切到该会话去处理待授权/提问 */
   pushFocusSession: 'push:focus-session',
+  /** 桌面授权浮窗已处理（或主窗口已响应）：渲染层清掉对应 permission 卡 */
+  pushPermissionSettled: 'push:permission-settled',
+  /** 桌面授权浮窗：用户点了允许/拒绝 */
+  toastPermissionDecide: 'toast:permission-decide',
+  /** 桌面授权浮窗：用户点 × 仅关闭（不代替授权决定） */
+  toastPermissionDismiss: 'toast:permission-dismiss',
+  /** 桌面授权浮窗：用户点「打开应用」 */
+  toastOpenApp: 'toast:open-app',
+  /** 渲染层汇报当前正在看的会话（用于：看该会话时自动收起桌面浮窗） */
+  reportActiveSession: 'ui:report-active-session',
+  /** 渲染层汇报任务栏角标：none / unread（蓝）/ pending（橙） */
+  reportTaskbarBadge: 'ui:report-taskbar-badge',
   /** 语言切换后广播给所有窗口（payload 为归一后的 Locale） */
   localeChanged: 'push:locale-changed'
 } as const

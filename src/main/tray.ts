@@ -3,7 +3,7 @@
  *
  * 状态源：直接挂 AgentService 的 'state' 事件（主进程是连接状态源头，
  * 不需要渲染进程经 IPC 转发）。五态连接状态折叠为托盘三态：
- *   ready → ok(绿)  idle/starting/stopped → attention(黄)  error → error(红)
+ *   ready → ok（无角标）  idle/starting/stopped → attention(黄点)  error → error(红点)
  *
  * 关闭行为：点窗口 ✕ 不退出，隐藏到托盘（首次弹气泡提示），
  * 真正退出走托盘菜单「退出」或 app.quit()（before-quit 时标记 isQuitting）。

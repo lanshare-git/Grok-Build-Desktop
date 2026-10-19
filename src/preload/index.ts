@@ -62,6 +62,8 @@ const api: GrokDesktopApi = {
   sessionMoveData: (args: { sessionId: string; fromCwd: string; toCwd: string }) =>
     ipcRenderer.invoke(CH.sessionMoveData, args),
   screenshotSnip: () => ipcRenderer.invoke(CH.screenshotSnip),
+  capturePageRect: (rect) => ipcRenderer.invoke(CH.capturePageRect, rect),
+  saveLongShotPng: (args) => ipcRenderer.invoke(CH.saveLongShotPng, args),
   resolveAsset: (rawUri: string) => ipcRenderer.invoke(CH.assetResolve, rawUri),
 
   getProxy: () => ipcRenderer.invoke(CH.proxyGet),
@@ -140,6 +142,8 @@ const api: GrokDesktopApi = {
   setLocale: (locale: Locale | null) => ipcRenderer.invoke(CH.localeSet, locale),
   getDeletePurgeDefault: () => ipcRenderer.invoke(CH.deletePurgeDefaultGet),
   setDeletePurgeDefault: (value: boolean) => ipcRenderer.invoke(CH.deletePurgeDefaultSet, value),
+  getDesktopPermToast: () => ipcRenderer.invoke(CH.desktopPermToastGet),
+  setDesktopPermToast: (mode) => ipcRenderer.invoke(CH.desktopPermToastSet, mode),
   hideWindow: () => ipcRenderer.invoke(CH.windowHide),
   quitApp: () => ipcRenderer.invoke(CH.appQuit),
 
@@ -149,6 +153,12 @@ const api: GrokDesktopApi = {
   onCloseActionRequest: (cb: () => void) => subscribe(CH.closeActionRequest, cb),
   onFocusSession: (cb: (event: { sessionId: string }) => void) =>
     subscribe(CH.pushFocusSession, cb),
+  onPermissionSettled: (cb: (event: { requestId: number }) => void) =>
+    subscribe(CH.pushPermissionSettled, cb),
+  reportActiveSession: (sessionId: string | null) =>
+    ipcRenderer.invoke(CH.reportActiveSession, { sessionId }),
+  reportTaskbarBadge: (kind: 'none' | 'unread' | 'pending') =>
+    ipcRenderer.invoke(CH.reportTaskbarBadge, { kind }),
   onLocaleChanged: (cb: (locale: Locale) => void) => subscribe(CH.localeChanged, cb)
 }
 

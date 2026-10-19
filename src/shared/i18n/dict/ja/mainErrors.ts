@@ -47,5 +47,8 @@ export const mainErrors: typeof zh = {
   },
   exportMarkdown: {
     dialogTitle: 'セッションを Markdown としてエクスポート'
+  },
+  longShot: {
+    dialogTitle: 'セッション長截図を保存'
   }
 }

@@ -21,9 +21,11 @@ export const sidebar = {
   removeFromList: '从工作目录列表移除',
   statusRunning: '正在生成',
   statusPending: '需要你响应',
-  statusDone: '已完成',
+  statusUnread: '已完成（未读）',
+  statusDone: '空闲',
   tagRunning: '生成中',
   tagPending: '待响应',
+  tagUnread: '未读',
   renameInputTitle: '直接编辑；留空或改回原标题，则恢复跟随 grok 的自动标题',
   sessionTitleCustom: (vars: { title: string; original: string }) =>
     `${vars.title}\n（双击改名；原名：${vars.original}）`,

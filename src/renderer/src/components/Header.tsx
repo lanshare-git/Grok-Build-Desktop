@@ -46,10 +46,14 @@ export default function Header(): JSX.Element {
     setRenaming(false)
   }
 
-  const modelOption = session.configOptions.find((o) => (o.configId ?? o.id) === 'model')
-  const effortOption = session.configOptions.find(
-    (o) => (o.configId ?? o.id) === 'reasoning_effort'
-  )
+  // 草稿会话自身没有 ACP 下发的选项；用缓存目录兜底，这样新建任务也能选模型
+  const catalog = useStore((s) => s.configOptionCatalog)
+  const modelOption =
+    session.configOptions.find((o) => (o.configId ?? o.id) === 'model') ??
+    catalog.find((o) => (o.configId ?? o.id) === 'model')
+  const effortOption =
+    session.configOptions.find((o) => (o.configId ?? o.id) === 'reasoning_effort') ??
+    catalog.find((o) => (o.configId ?? o.id) === 'reasoning_effort')
   const usage = session.usage
 
   return (
@@ -117,7 +121,11 @@ export default function Header(): JSX.Element {
         {modelOption && (
           <select
             className="chip chip-select"
-            value={modelOption.currentValue ?? ''}
+            value={
+              session.isDraft
+                ? (session.pendingModel ?? modelOption.currentValue ?? '')
+                : (modelOption.currentValue ?? '')
+            }
             onChange={(e) => void changeConfigOption('model', e.target.value)}
             title={t('header.model')}
           >
@@ -132,7 +140,11 @@ export default function Header(): JSX.Element {
         {effortOption && (
           <select
             className="chip chip-select"
-            value={effortOption.currentValue ?? ''}
+            value={
+              session.isDraft
+                ? (session.pendingEffort ?? effortOption.currentValue ?? '')
+                : (effortOption.currentValue ?? '')
+            }
             onChange={(e) => void changeConfigOption('reasoning_effort', e.target.value)}
             title={t('header.effort')}
           >

@@ -1,34 +1,11 @@
 import { useT, type MessageKey } from '../i18n'
 import { useStore } from '../store'
 import { stringifyPretty } from '../utils'
+import {
+  isDenyPermissionOption,
+  localizePermissionOption
+} from '@shared/permission-labels'
 import type { PermissionRequestEvent } from '@shared/types'
-
-interface PermissionOptionLike {
-  name?: string
-  kind?: string
-}
-
-/** 把 agent 返回的英文选项名映射为界面语言文案；未匹配到时原样返回 */
-export function localizedOptionName(
-  opt: PermissionOptionLike,
-  t: (key: MessageKey) => string
-): string {
-  const name = opt.name ?? ''
-  const kind = (opt.kind ?? '').toLowerCase()
-  // 标准 ACP kind 优先
-  if (kind === 'allow_once') return t('prompts.perm.allowOnce')
-  if (kind === 'allow_always') return t('prompts.perm.allowAlways')
-  if (kind === 'reject_once') return t('prompts.perm.rejectOnce')
-  if (kind === 'reject_always') return t('prompts.perm.rejectAlways')
-  // grok agent 固定的英文选项名
-  const n = name.toLowerCase()
-  if (/don'?t ask again for bash/.test(n)) return t('prompts.perm.allowSameBash')
-  if (/tell grok|do differently/.test(n)) return t('prompts.perm.rejectTellGrok')
-  if (/don'?t ask again/.test(n)) return t('prompts.perm.rejectNoAsk')
-  if (/^(yes|allow|proceed|approve)/.test(n)) return t('prompts.perm.allow')
-  if (/^(no|deny|reject)/.test(n)) return t('prompts.perm.reject')
-  return name
-}
 
 /**
  * 工具执行授权面板。
@@ -68,7 +45,7 @@ export default function PermissionPanel({
 
       <div className="prompt-actions">
         {request.options.map((opt) => {
-          const isDeny = /deny|reject|no/i.test(opt.kind ?? opt.name ?? '')
+          const isDeny = isDenyPermissionOption(opt)
           return (
             <button
               key={opt.optionId}
@@ -76,13 +53,16 @@ export default function PermissionPanel({
               title={opt.name ?? opt.optionId}
               onClick={() => decide(opt.optionId)}
             >
-              {localizedOptionName(opt, t)}
+              {localizePermissionOption(opt, (k) => t(k as MessageKey))}
             </button>
           )
         })}
-        <button className="btn btn-ghost" onClick={() => decide(null)}>
-          {t('prompts.perm.reject')}
-        </button>
+        {/* agent 已带拒绝选项时不再叠一个裸「拒绝」（否则会变成三个拒绝） */}
+        {!request.options.some((o) => isDenyPermissionOption(o)) && (
+          <button className="btn btn-ghost" onClick={() => decide(null)}>
+            {t('prompts.perm.reject')}
+          </button>
+        )}
       </div>
     </div>
   )

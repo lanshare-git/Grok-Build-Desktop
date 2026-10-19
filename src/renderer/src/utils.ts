@@ -45,11 +45,9 @@ export function sessionDisplayTitle(session: SessionMeta, locale: Locale): strin
 /**
  * 会话的「最后活动时间」——排序与相对时间显示都用它。
  *
- * 优先用 `activityAt`（主进程从磁盘 events.jsonl 读到的**真实回合时间**）。
- * 只有在没有磁盘真值时才回落到 `updatedAt`：后者是客户端边收边记的，
- * grok 在 session/load 与启动时会全量重放历史，重放通知会把 updatedAt 刷成
- * 「现在」，于是「只是点开看一眼」甚至「启动时自动加载」都会显示「刚刚」。
- * 磁盘真值不受重放影响，是这个顽疾的根治办法。
+ * 优先用 `activityAt`：启动/加载时由磁盘 turn_* 回填（忽略 mcp_*），
+ * 回合进行中由客户端在真实流式更新与发消息时同步刷新。
+ * 没有 activityAt 时才回落到 `updatedAt`（后者易被 session/load 重放污染）。
  */
 export function sessionActivityAt(session: SessionMeta): number {
   return session.activityAt ?? session.updatedAt

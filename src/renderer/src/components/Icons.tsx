@@ -154,6 +154,14 @@ export const IconImage = ({ size = 16, className }: IconProps): JSX.Element => (
   </svg>
 )
 
+/** 长截屏（相框 + 向下箭头） */
+export const IconLongShot = ({ size = 16, className }: IconProps): JSX.Element => (
+  <svg {...base(size, className)}>
+    <rect x="4" y="3" width="16" height="12" rx="2" />
+    <path d="M12 15v5M9 18l3 3 3-3" />
+  </svg>
+)
+
 export const IconScissors = ({ size = 16, className }: IconProps): JSX.Element => (
   <svg {...base(size, className)}>
     <circle cx="6" cy="6" r="3" />

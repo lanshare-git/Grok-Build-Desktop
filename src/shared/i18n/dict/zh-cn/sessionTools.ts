@@ -1,6 +1,8 @@
 export const sessionTools = {
   exportMarkdown: '导出为 Markdown',
   exporting: '导出中…',
+  longShot: '长截屏…',
+  longShotTitle: '从指定消息截到对话底部，复制到剪贴板并可另存为 PNG',
   trace: '导出诊断包',
   tracing: '打包中…',
   traceTitleDraft: '草稿会话尚未落盘，无法导出诊断包',

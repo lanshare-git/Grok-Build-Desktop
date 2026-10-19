@@ -164,11 +164,32 @@ export default function Composer(): JSX.Element {
     el.style.height = `${Math.min(el.scrollHeight, 220)}px`
   }, [text])
 
-  // 切换会话时清空草稿
+  // 切换会话：恢复该会话未发送的输入框草稿（对齐 Cursor）
   useEffect(() => {
-    setText('')
-    setAttachments([])
+    if (!activeId) {
+      setText('')
+      setAttachments([])
+      return
+    }
+    const d = useStore.getState().composerDrafts[activeId]
+    setText(d?.text ?? '')
+    setAttachments(
+      (d?.attachments ?? []).map((img) => ({
+        ...img,
+        id: uid(),
+        preview: `data:${img.mimeType};base64,${img.data}`
+      }))
+    )
   }, [activeId])
+
+  /** 把当前输入同步进 store，切走再回来还能恢复；也用于空草稿「有字就不撤销」 */
+  const persistDraft = (nextText: string, nextAtt: Attachment[]): void => {
+    if (!activeId) return
+    useStore.getState().setComposerDraft(activeId, {
+      text: nextText,
+      attachments: nextAtt.map(({ data, mimeType, name }) => ({ data, mimeType, name }))
+    })
+  }
 
   // 「+」菜单：输入区左侧只留一个按钮，其余工具收进下拉（不铺按钮）
   const [menuOpen, setMenuOpen] = useState(false)
@@ -206,10 +227,18 @@ export default function Composer(): JSX.Element {
     reader.onload = (): void => {
       const dataUrl = String(reader.result)
       const base64 = dataUrl.slice(dataUrl.indexOf(',') + 1)
-      setAttachments((prev) => [
-        ...prev,
-        { id: uid(), data: base64, mimeType: blob.type, name: name ?? t('composer.imageFallback'), preview: dataUrl }
-      ])
+      const next: Attachment = {
+        id: uid(),
+        data: base64,
+        mimeType: blob.type,
+        name: name ?? t('composer.imageFallback'),
+        preview: dataUrl
+      }
+      setAttachments((prev) => {
+        const list = [...prev, next]
+        persistDraft(text, list)
+        return list
+      })
     }
     void reader.readAsDataURL(blob)
   }
@@ -240,11 +269,17 @@ export default function Composer(): JSX.Element {
   }
 
   const removeAttachment = (id: string): void => {
-    setAttachments((prev) => prev.filter((a) => a.id !== id))
+    setAttachments((prev) => {
+      const list = prev.filter((a) => a.id !== id)
+      persistDraft(text, list)
+      return list
+    })
   }
 
   const selectCommand = (name: string): void => {
-    setText(`${name} `)
+    const next = `${name} `
+    setText(next)
+    persistDraft(next, attachments)
     requestAnimationFrame(() => textareaRef.current?.focus())
   }
 
@@ -274,8 +309,10 @@ export default function Composer(): JSX.Element {
       attachments.length > 0
         ? attachments.map(({ data, mimeType, name }) => ({ data, mimeType, name }))
         : undefined
+    const sid = activeId
     setText('')
     setAttachments([])
+    if (sid) useStore.getState().clearComposerDraft(sid)
     void sendPrompt(body, images)
   }
 
@@ -421,7 +458,9 @@ export default function Composer(): JSX.Element {
           placeholder={t('composer.placeholder')}
           value={text}
           onChange={(e) => {
-            setText(e.target.value)
+            const next = e.target.value
+            setText(next)
+            persistDraft(next, attachments)
             setPaletteDismissed(false)
             setPaletteIndex(0)
           }}

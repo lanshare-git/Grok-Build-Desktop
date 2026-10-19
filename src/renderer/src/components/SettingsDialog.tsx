@@ -3,18 +3,20 @@ import { useEffect, useState } from 'react'
 import {
   getCloseAction,
   getDeletePurgeDefault,
+  getDesktopPermToast,
   loginGrok,
   logoutAccount,
   refreshAccount,
   refreshMcp,
   setCloseAction,
   setDeletePurgeDefault,
+  setDesktopPermToast,
   setToolCallDensity
 } from '../actions'
 import { useStore } from '../store'
 import { LOCALE_OPTIONS, useT, type Locale, type MessageKey } from '../i18n'
 import type { SettingsSection } from '../store'
-import type { CloseAction, ToolCallDensity } from '@shared/types'
+import type { CloseAction, DesktopPermToastMode, ToolCallDensity } from '@shared/types'
 import { DENSITY_OPTIONS } from '@shared/types'
 import AboutPanel from './AboutPanel'
 import DiagnosticsPanel from './DiagnosticsPanel'
@@ -142,10 +144,12 @@ function GeneralSettings(): JSX.Element {
   const [closeAction, setCloseActionState] = useState<CloseAction | null>(null)
   /** 删除弹窗里「同时删除磁盘文件」是否默认勾选（默认 true，与历史行为一致） */
   const [purgeDefault, setPurgeDefaultState] = useState(true)
+  const [permToast, setPermToastState] = useState<DesktopPermToastMode>('on')
 
   useEffect(() => {
     void getCloseAction().then(setCloseActionState)
     void getDeletePurgeDefault().then(setPurgeDefaultState)
+    void getDesktopPermToast().then(setPermToastState)
   }, [])
 
   const choose = async (action: CloseAction | null): Promise<void> => {
@@ -156,6 +160,11 @@ function GeneralSettings(): JSX.Element {
   const choosePurge = async (value: boolean): Promise<void> => {
     await setDeletePurgeDefault(value)
     setPurgeDefaultState(value)
+  }
+
+  const choosePermToast = async (mode: DesktopPermToastMode): Promise<void> => {
+    await setDesktopPermToast(mode)
+    setPermToastState(mode)
   }
 
   return (
@@ -219,6 +228,31 @@ function GeneralSettings(): JSX.Element {
           </div>
         </div>
         <div className="mcp-hint">{t('settings.general.purge.hint')}</div>
+      </div>
+
+      {/* 右下角桌面授权浮窗 */}
+      <div className="settings-group">
+        <div className="settings-row">
+          <div className="settings-row-label">
+            <span className="settings-row-title">{t('settings.general.desktopPermToast.title')}</span>
+            <span className="settings-row-desc">{t('settings.general.desktopPermToast.desc')}</span>
+          </div>
+          <div className="close-action-setting is-seg">
+            <button
+              className={`seg ${permToast === 'on' ? 'is-active' : ''}`}
+              onClick={() => void choosePermToast('on')}
+            >
+              {t('settings.general.desktopPermToast.on')}
+            </button>
+            <button
+              className={`seg ${permToast === 'off' ? 'is-active' : ''}`}
+              onClick={() => void choosePermToast('off')}
+            >
+              {t('settings.general.desktopPermToast.off')}
+            </button>
+          </div>
+        </div>
+        <div className="mcp-hint">{t('settings.general.desktopPermToast.hint')}</div>
       </div>
 
       {/* 工具调用展示密度：与终端 /density 共用 config.toml 的 ui.tool_call_density */}

@@ -26,9 +26,11 @@ export const sidebar: typeof zh = {
   removeFromList: '作業ディレクトリ一覧から削除',
   statusRunning: '生成中',
   statusPending: '応答が必要です',
-  statusDone: '完了',
+  statusUnread: '完了（未読）',
+  statusDone: 'アイドル',
   tagRunning: '生成中',
   tagPending: '応答待ち',
+  tagUnread: '未読',
   renameInputTitle:
     '直接編集できます。空欄または元のタイトルに戻すと、grok の自動タイトルに再び従います',
   sessionTitleCustom: (vars: { title: string; original: string }) =>

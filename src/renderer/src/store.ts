@@ -55,6 +55,79 @@ export type SettingsSection =
 const MAX_SESSIONS = 60
 const MAX_ITEMS_PER_SESSION = 400
 
+/** 输入框未发送草稿（按会话记忆；不落盘，含图片 base64 太大） */
+export interface ComposerDraft {
+  text: string
+  attachments: ImageAttachment[]
+}
+
+function composerDraftHasContent(draft: ComposerDraft | undefined): boolean {
+  if (!draft) return false
+  return draft.text.trim().length > 0 || draft.attachments.length > 0
+}
+
+/**
+ * 可丢弃的空草稿（对齐 Cursor「New Agent 未发消息即撤销」）。
+ * 已写入用户消息、正在首发、或输入框里还有未发送内容的草稿不能丢。
+ */
+function isDisposableDraft(
+  session: SessionMeta,
+  running: readonly string[],
+  composerDrafts: Record<string, ComposerDraft>
+): boolean {
+  return (
+    !!session.isDraft &&
+    session.items.length === 0 &&
+    !running.includes(session.id) &&
+    !composerDraftHasContent(composerDrafts[session.id])
+  )
+}
+
+function dropComposerDraft(
+  map: Record<string, ComposerDraft>,
+  id: string
+): Record<string, ComposerDraft> {
+  if (!(id in map)) return map
+  const next = { ...map }
+  delete next[id]
+  return next
+}
+
+const CATALOG_IDS = new Set(['model', 'reasoning_effort'])
+
+/** 从会话 configOptions 抽出可缓存的模型/推理强度选项（供新任务草稿下拉用） */
+function pickConfigCatalog(options: ConfigOption[] | undefined): ConfigOption[] {
+  if (!options?.length) return []
+  return options.filter((o) => CATALOG_IDS.has(o.configId ?? o.id ?? ''))
+}
+
+function mergeConfigCatalog(
+  prev: ConfigOption[],
+  incoming: ConfigOption[] | undefined
+): ConfigOption[] {
+  const picked = pickConfigCatalog(incoming)
+  if (picked.length === 0) return prev
+  const map = new Map<string, ConfigOption>()
+  for (const o of prev) {
+    const id = o.configId ?? o.id
+    if (id) map.set(id, o)
+  }
+  for (const o of picked) {
+    const id = o.configId ?? o.id
+    if (id) map.set(id, o)
+  }
+  return [...map.values()]
+}
+
+/** 从已有会话里挖一份目录（冷启动时还没有独立缓存） */
+function catalogFromSessions(sessions: SessionMeta[]): ConfigOption[] {
+  let out: ConfigOption[] = []
+  for (const s of sessions) {
+    out = mergeConfigCatalog(out, s.configOptions)
+  }
+  return out
+}
+
 /**
  * 按 name 合并两组命令，后者覆盖同名前项的描述（grok 可能给同一命令补全描述）。
  * 返回新数组，避免在 selector 里产生新引用导致的重渲染。
@@ -159,13 +232,40 @@ function markStuckToolsAfterReplay(sessions: SessionMeta[], sessionId: string): 
   return next
 }
 
-function appendText(items: ChatItem[], kind: TextKind, text?: string): ChatItem[] {
+function isLocalUser(item: ChatItem | undefined): item is Extract<ChatItem, { kind: 'user' }> {
+  return !!item && item.kind === 'user' && item.local === true
+}
+
+/** 优先用 agent 下发的真实事件时间；没有才退回现在（现场发送的乐观气泡仍走 Date.now()） */
+function eventAt(update: SessionUpdateEnvelope): number {
+  const meta = update._meta
+  if (meta && typeof meta === 'object') {
+    const raw = (meta as Record<string, unknown>).agentTimestampMs
+    if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) return raw
+  }
+  return Date.now()
+}
+
+function appendText(items: ChatItem[], kind: TextKind, text?: string, at = Date.now()): ChatItem[] {
   if (!text) return items
   const last = items[items.length - 1]
 
   if (last && last.kind === kind) {
     // 用字面量比较才能让 TS 收窄到具体变体
     if (last.kind === 'user') {
+      // 本地乐观插入的用户消息已经是完整一条。agent 回显同一段文字时
+      // 再 concat 会变成「自己的话重复两遍」；重放历史的下一条用户消息
+      // 若拼进来，刚发的内容会消失在历史气泡里（界面底部就像没发出去）。
+      if (last.local) {
+        // agent 回显同一段 → 去掉 local。若不摘掉，下次 session/load 会把这条
+        // 当「未确认」收进 pending，重放完再挂到列表末尾，看起来就像
+        // 「最新一条是我发的、后面没有 Agent 回复」（2026-10-19 实锤）。
+        if (last.text.includes(text) || text.includes(last.text)) {
+          const textKeep = last.text.length >= text.length ? last.text : text
+          return [...items.slice(0, -1), { ...last, text: textKeep, local: false }]
+        }
+        return [...items, { kind: 'user', id: uid(), text, at }]
+      }
       return [...items.slice(0, -1), { ...last, text: last.text + text }]
     }
     if (last.streaming) {
@@ -175,11 +275,11 @@ function appendText(items: ChatItem[], kind: TextKind, text?: string): ChatItem[
 
   const sealed = finalize(items)
   if (kind === 'user') {
-    return [...sealed, { kind: 'user', id: uid(), text, at: Date.now() }]
+    return [...sealed, { kind: 'user', id: uid(), text, at }]
   }
   return [
     ...sealed,
-    { kind, id: uid(), text, streaming: true, at: Date.now() } as ChatItem
+    { kind, id: uid(), text, streaming: true, at } as ChatItem
   ]
 }
 
@@ -224,7 +324,7 @@ function mediaFromUpdate(update: SessionUpdateEnvelope): MediaAttachment[] {
 }
 
 /** 把媒体挂到「当前正在流式输出的助手消息」；若没有则新建一条只含媒体的助手消息 */
-function appendMedia(items: ChatItem[], media: MediaAttachment[]): ChatItem[] {
+function appendMedia(items: ChatItem[], media: MediaAttachment[], at = Date.now()): ChatItem[] {
   if (media.length === 0) return items
   const merge = (prev: MediaAttachment[] | undefined): MediaAttachment[] =>
     media.reduce((list, m) => (list.some((x) => x.uri === m.uri) ? list : [...list, m]), prev ?? [])
@@ -238,13 +338,13 @@ function appendMedia(items: ChatItem[], media: MediaAttachment[]): ChatItem[] {
     id: uid(),
     text: '',
     streaming: true,
-    at: Date.now(),
+    at,
     media: merge(undefined)
   } as ChatItem
   return [...sealed, item]
 }
 
-function upsertTool(items: ChatItem[], update: SessionUpdateEnvelope): ChatItem[] {
+function upsertTool(items: ChatItem[], update: SessionUpdateEnvelope, at = Date.now()): ChatItem[] {
   const toolCallId = String(update.toolCallId ?? '')
   if (!toolCallId) return items
 
@@ -283,41 +383,42 @@ function upsertTool(items: ChatItem[], update: SessionUpdateEnvelope): ChatItem[
       input: update.rawInput,
       output: toolCallOutput(update),
       locations: update.locations as any,
-      at: Date.now()
+      at
     }
   ]
 }
 
-function upsertPlan(items: ChatItem[], entries: PlanEntry[]): ChatItem[] {
+function upsertPlan(items: ChatItem[], entries: PlanEntry[], at = Date.now()): ChatItem[] {
   const index = items.findIndex((it) => it.kind === 'plan')
   if (index !== -1) {
     const current = items[index]
     if (current.kind !== 'plan') return items
-    const merged = { ...current, entries, at: Date.now() }
+    const merged = { ...current, entries, at }
     return [...items.slice(0, index), merged, ...items.slice(index + 1)]
   }
-  return [...finalize(items), { kind: 'plan', id: uid(), entries, at: Date.now() }]
+  return [...finalize(items), { kind: 'plan', id: uid(), entries, at }]
 }
 
 function reduceUpdate(items: ChatItem[], update: SessionUpdateEnvelope): ChatItem[] {
+  const at = eventAt(update)
   switch (update.sessionUpdate) {
     case 'user_message_chunk':
-      return appendText(items, 'user', update.content?.text)
+      return appendText(items, 'user', update.content?.text, at)
     case 'agent_message_chunk': {
       const text = update.content?.text
       const media = mediaFromUpdate(update)
       // 文本与媒体可能分多条 chunk 到达，但都属于同一条流式助手消息
-      let next = text ? appendText(items, 'assistant', text) : items
-      if (media.length) next = appendMedia(next, media)
+      let next = text ? appendText(items, 'assistant', text, at) : items
+      if (media.length) next = appendMedia(next, media, at)
       return next
     }
     case 'agent_thought_chunk':
-      return appendText(items, 'thinking', update.content?.text)
+      return appendText(items, 'thinking', update.content?.text, at)
     case 'tool_call':
     case 'tool_call_update':
-      return upsertTool(items, update)
+      return upsertTool(items, update, at)
     case 'plan':
-      return upsertPlan(items, update.entries ?? [])
+      return upsertPlan(items, update.entries ?? [], at)
     default:
       return items
   }
@@ -357,7 +458,25 @@ interface AppState {
   /** 用户主目录（homedir）：「纯聊天」会话以此作为工作根，不受默认 cwd 影响 */
   homeDir: string
   permissionMode: PermissionMode
+  /**
+   * 各会话输入框未发送内容（文字 + 图片）。不持久化。
+   * 对齐 Cursor：切走再回来草稿还在；新任务只要输入框非空，切走也不自动撤销。
+   */
+  composerDrafts: Record<string, ComposerDraft>
+  /**
+   * 最近一次从真实会话拿到的模型 / 推理强度选项目录。
+   * 草稿会话没有 ACP configOptions，Header 用这份缓存画下拉。
+   */
+  configOptionCatalog: ConfigOption[]
+  /** 新建任务默认选用的模型（用户在草稿或真实会话里改过会更新） */
+  preferredModel: string | null
+  preferredEffort: string | null
   running: string[]
+  /**
+   * Agent 已跑完、但用户还没点开看过的会话（不持久化）。
+   * 对齐 Cursor：蓝点 = 做完未读；点开该会话即清除。
+   */
+  unreadSessionIds: string[]
   /**
    * 待用户响应的工具授权请求（可多个任务并存，按 sessionId 归属）。
    *
@@ -416,6 +535,12 @@ interface AppState {
    * 但最多只到这个点 —— 防止超长会话一直重放导致该会话永远不刷新活动时间。
    */
   replayCapUntil: Record<string, number>
+  /**
+   * 正在重放时，用户新发的消息不能进 items（重放是追加语义，会插到历史中间，
+   * 或被 beginSessionReload 清掉）。先挂在这里，ChatView 永远画在列表末尾，
+   * 重放收尾再并进 items。不持久化。
+   */
+  pendingUserMessages: Record<string, Extract<ChatItem, { kind: 'user' }>[]>
   /** 工作目录登记表：别名 + 手动添加的目录（会话本身的 cwd 由 grok 决定，不在这里） */
   workspaces: WorkspaceMeta[]
   /** 侧栏里折叠起来的分组（存规范化小写路径） */
@@ -447,6 +572,11 @@ interface AppState {
   usageOpen: boolean
   /** 用量面板当前查看的会话 id；null = 只看全局累计（从账号菜单进来就是这种） */
   usageSessionId: string | null
+  /**
+   * 长截屏「选起点」模式：非 null 时 ChatView 进入点选态。
+   * 不持久化 —— 关应用就取消。
+   */
+  longShotPickSessionId: string | null
   /**
    * agent 握手时上报的内置命令（compact / context / deep-research…），
    * 与 `grok inspect` 拿到的技能、子代理合并后构成命令面板的完整来源。
@@ -515,6 +645,16 @@ interface AppState {
   materializeDraft(draftId: string, meta: { id: string; configOptions?: ConfigOption[] }): void
   selectSession(id: string | null): void
   deleteSession(id: string): void
+  /** 写入/更新某会话的输入框草稿；text 与附件皆空则删除该键 */
+  setComposerDraft(sessionId: string, draft: ComposerDraft): void
+  clearComposerDraft(sessionId: string): void
+  /** 记住模型/推理强度选项目录（来自 session/new 或 config_option_update） */
+  rememberConfigCatalog(options: ConfigOption[] | undefined): void
+  /**
+   * 草稿上改模型/推理强度：只写 pending* + preferred，首发 newSession 时带上。
+   * 真实会话请走 actions.changeConfigOption（发 ACP）。
+   */
+  setDraftConfig(sessionId: string, configId: 'model' | 'reasoning_effort', value: string): void
   /** 改会话名：写 customTitle，不动 updatedAt（改名不该改变排序） */
   renameSession(id: string, title: string): void
   /**
@@ -567,6 +707,10 @@ interface AppState {
   applyStreamBatch(events: AcpStreamEvent[]): void
   appendNotice(sessionId: string, text: string, level?: 'info' | 'warn' | 'error'): void
   setRunning(sessionId: string, running: boolean): void
+  /** 标记会话有未读完成结果（一般由 setRunning(false) 自动调用） */
+  markSessionUnread(sessionId: string): void
+  /** 清除未读（点开会话时） */
+  clearSessionUnread(sessionId: string): void
   finalizeSession(sessionId: string): void
   /** 编辑重发：删除指定 item 及其之后的所有内容（UI 层从头开始对话） */
   truncateFrom(sessionId: string, itemId: string): void
@@ -597,6 +741,10 @@ interface AppState {
   pushToast(toast: Omit<Toast, 'id' | 'createdAt'> & { id?: string }): string
   dismissToast(id: string): void
 
+  /** 进入长截屏选点模式（通常先切到该会话） */
+  beginLongShotPick(sessionId: string): void
+  cancelLongShotPick(): void
+
   activeSession(): SessionMeta | undefined
 }
 
@@ -618,6 +766,7 @@ function applyOne(s: AppState, events: AcpStreamEvent[]): Partial<AppState> {
   let sessions = s.sessions
   let suppressActivityUntil = s.suppressActivityUntil
   let replayCapUntil = s.replayCapUntil
+  let configOptionCatalog = s.configOptionCatalog
   /** 是否已复制过数组：批内只复制一次，后续更新就地改我们自己的副本 */
   let copied = false
 
@@ -647,6 +796,7 @@ function applyOne(s: AppState, events: AcpStreamEvent[]): Partial<AppState> {
     }
     if (update.sessionUpdate === 'config_option_update' && update.configOptions) {
       configOptions = update.configOptions
+      configOptionCatalog = mergeConfigCatalog(configOptionCatalog, update.configOptions)
     }
     const rawUsage = (update as any).usage
     if (rawUsage && typeof rawUsage === 'object') {
@@ -690,6 +840,9 @@ function applyOne(s: AppState, events: AcpStreamEvent[]): Partial<AppState> {
       }
     }
 
+    // ⚠️ activityAt 也要一起刷：侧栏优先读 activityAt（防重放污染 updatedAt）。
+    // 若只改 updatedAt，上一回合 refreshActivity 留下的旧 activityAt 会盖住本回合的
+    // 实时活动——表现为「新建会话正在跑，侧栏却显示几十分钟前」（2026-10-19）。
     const next: SessionMeta = {
       ...session,
       items: trimmed,
@@ -697,15 +850,25 @@ function applyOne(s: AppState, events: AcpStreamEvent[]): Partial<AppState> {
       commands,
       configOptions,
       usage,
-      updatedAt: wasActive ? now : session.updatedAt
+      updatedAt: wasActive ? now : session.updatedAt,
+      activityAt: wasActive ? now : session.activityAt
     }
 
     // 就地写进我们自己的副本
     sessions[index] = next
   }
 
-  if (!copied) return {}
-  return { sessions, suppressActivityUntil, replayCapUntil }
+  if (!copied && configOptionCatalog === s.configOptionCatalog) return {}
+  const out: Partial<AppState> = {}
+  if (copied) {
+    out.sessions = sessions
+    out.suppressActivityUntil = suppressActivityUntil
+    out.replayCapUntil = replayCapUntil
+  }
+  if (configOptionCatalog !== s.configOptionCatalog) {
+    out.configOptionCatalog = configOptionCatalog
+  }
+  return out
 }
 
 /**
@@ -723,6 +886,9 @@ type PersistedState = Pick<
   | 'collapsedGroups'
   | 'expandedToolCalls'
   | 'collapsedToolCalls'
+  | 'configOptionCatalog'
+  | 'preferredModel'
+  | 'preferredEffort'
 >
 
 /**
@@ -810,7 +976,12 @@ export const useStore = create<AppState>()(
       cwd: '',
       homeDir: '',
       permissionMode: 'bypassPermissions',
+      composerDrafts: {},
+      configOptionCatalog: [],
+      preferredModel: null,
+      preferredEffort: null,
       running: [],
+      unreadSessionIds: [],
       permissions: [],
       questions: [],
       toasts: [],
@@ -822,8 +993,9 @@ export const useStore = create<AppState>()(
       loadedSessions: [],
       suppressActivityUntil: {},
       replayCapUntil: {},
-  reloadingSessions: [],
+      reloadingSessions: [],
       replayProgress: {},
+      pendingUserMessages: {},
       workspaces: [],
       collapsedGroups: [],
       expandedToolCalls: [],
@@ -835,6 +1007,7 @@ export const useStore = create<AppState>()(
       envInfo: null,
       usageOpen: false,
       usageSessionId: null,
+      longShotPickSessionId: null,
       collapsedToolCalls: [],
       toolCallDensity: 'compact-ungrouped',
 
@@ -974,8 +1147,15 @@ export const useStore = create<AppState>()(
 
       createSession: ({ id, cwd, configOptions, kind }) =>
         set((s) => {
+          const clearUnread = {
+            unreadSessionIds: s.unreadSessionIds.filter((x) => x !== id)
+          }
           if (s.sessions.some((x) => x.id === id)) {
-            return { activeId: id, loadedSessions: s.loadedSessions.includes(id) ? s.loadedSessions : [...s.loadedSessions, id] }
+            return {
+              activeId: id,
+              loadedSessions: s.loadedSessions.includes(id) ? s.loadedSessions : [...s.loadedSessions, id],
+              ...clearUnread
+            }
           }
           const session: SessionMeta = {
             id,
@@ -991,13 +1171,20 @@ export const useStore = create<AppState>()(
           return {
             sessions: [session, ...s.sessions].slice(0, MAX_SESSIONS),
             activeId: id,
-            loadedSessions: [...s.loadedSessions, id]
+            loadedSessions: [...s.loadedSessions, id],
+            configOptionCatalog: mergeConfigCatalog(s.configOptionCatalog, configOptions),
+            ...clearUnread
           }
         }),
 
       createDraftSession: ({ cwd, kind, permissionMode }) =>
         set((s) => {
           const id = `draft:${crypto.randomUUID()}`
+          // 目录为空时从其它会话挖一份，保证「新任务」也能立刻画模型下拉
+          const catalog =
+            s.configOptionCatalog.length > 0
+              ? s.configOptionCatalog
+              : catalogFromSessions(s.sessions)
           const session: SessionMeta = {
             id,
             title: kind === 'chat' ? tShared(get().locale, 'chat.newChat') : tShared(get().locale, 'chat.newTask'),
@@ -1005,15 +1192,37 @@ export const useStore = create<AppState>()(
             kind,
             isDraft: true,
             pendingPermissionMode: permissionMode,
+            pendingModel: s.preferredModel ?? undefined,
+            pendingEffort: s.preferredEffort ?? undefined,
             createdAt: Date.now(),
             updatedAt: Date.now(),
             items: [],
-            configOptions: [],
+            // 草稿本身没有 ACP 选项；挂上缓存目录供 Header 渲染（currentValue 用 preferred 覆盖）
+            configOptions: catalog.map((o) => {
+              const cid = o.configId ?? o.id
+              if (cid === 'model' && s.preferredModel) {
+                return { ...o, currentValue: s.preferredModel }
+              }
+              if (cid === 'reasoning_effort' && s.preferredEffort) {
+                return { ...o, currentValue: s.preferredEffort }
+              }
+              return o
+            }),
             commands: []
           }
+          // 对齐 Cursor：侧栏只保留一个空「新任务」，再建时先撤掉其它空草稿
+          // （输入框还有未发送内容的草稿不算空，会保留）
+          const dropped = s.sessions.filter((x) => isDisposableDraft(x, s.running, s.composerDrafts))
+          const kept = s.sessions.filter((x) => !isDisposableDraft(x, s.running, s.composerDrafts))
+          let composerDrafts = s.composerDrafts
+          for (const d of dropped) composerDrafts = dropComposerDraft(composerDrafts, d.id)
           return {
-            sessions: [session, ...s.sessions].slice(0, MAX_SESSIONS),
-            activeId: id
+            sessions: [session, ...kept].slice(0, MAX_SESSIONS),
+            activeId: id,
+            composerDrafts,
+            // 冷启动从其它会话挖出的目录写回，避免下次还要再扫
+            configOptionCatalog: catalog,
+            unreadSessionIds: s.unreadSessionIds.filter((x) => x !== id)
           }
         }),
 
@@ -1027,20 +1236,113 @@ export const useStore = create<AppState>()(
             id,
             isDraft: false,
             pendingPermissionMode: undefined,
+            pendingModel: undefined,
+            pendingEffort: undefined,
             configOptions: configOptions ?? [],
             updatedAt: Date.now()
           }
           const sessions = s.sessions.map((x) => (x.id === draftId ? real : x))
+          const pending = s.pendingUserMessages[draftId]
+          let pendingUserMessages = s.pendingUserMessages
+          if (pending && pending.length > 0) {
+            pendingUserMessages = { ...s.pendingUserMessages }
+            delete pendingUserMessages[draftId]
+            pendingUserMessages[id] = [...(pendingUserMessages[id] ?? []), ...pending]
+          }
+          // 输入框草稿随 sessionId 迁移（发送前通常已清空；兜底防丢）
+          let composerDrafts = s.composerDrafts
+          const moved = composerDrafts[draftId]
+          if (moved) {
+            composerDrafts = { ...composerDrafts, [id]: moved }
+            delete composerDrafts[draftId]
+          }
           return {
             sessions,
             activeId: id,
+            pendingUserMessages,
+            composerDrafts,
+            configOptionCatalog: mergeConfigCatalog(s.configOptionCatalog, configOptions),
             loadedSessions: s.loadedSessions.includes(id)
               ? s.loadedSessions
-              : [...s.loadedSessions, id]
+              : [...s.loadedSessions, id],
+            unreadSessionIds: s.unreadSessionIds.filter((x) => x !== id && x !== draftId)
           }
         }),
 
-      selectSession: (activeId) => set({ activeId }),
+      rememberConfigCatalog: (options) =>
+        set((s) => {
+          const next = mergeConfigCatalog(s.configOptionCatalog, options)
+          if (next === s.configOptionCatalog) return {}
+          // 顺带用最新 currentValue 填 preferred（用户还没手选过时）
+          const model = next.find((o) => (o.configId ?? o.id) === 'model')
+          const effort = next.find((o) => (o.configId ?? o.id) === 'reasoning_effort')
+          return {
+            configOptionCatalog: next,
+            preferredModel: s.preferredModel ?? model?.currentValue ?? null,
+            preferredEffort: s.preferredEffort ?? effort?.currentValue ?? null
+          }
+        }),
+
+      setDraftConfig: (sessionId, configId, value) =>
+        set((s) => ({
+          preferredModel: configId === 'model' ? value : s.preferredModel,
+          preferredEffort: configId === 'reasoning_effort' ? value : s.preferredEffort,
+          sessions: s.sessions.map((x) => {
+            if (x.id !== sessionId) return x
+            const configOptions = x.configOptions.map((o) =>
+              (o.configId ?? o.id) === configId ? { ...o, currentValue: value } : o
+            )
+            // 草稿才写 pending*；真实会话只乐观更新 currentValue + preferred
+            if (!x.isDraft) return { ...x, configOptions }
+            return {
+              ...x,
+              configOptions,
+              ...(configId === 'model' ? { pendingModel: value } : { pendingEffort: value })
+            }
+          })
+        })),
+
+      selectSession: (activeId) =>
+        set((s) => {
+          // 对齐 Cursor：空「New Agent」切走即撤销——未发过消息且输入框也空的草稿才丢掉
+          const prev = s.sessions.find((x) => x.id === s.activeId)
+          const dropPrev =
+            prev &&
+            prev.id !== activeId &&
+            isDisposableDraft(prev, s.running, s.composerDrafts)
+          const sessions = dropPrev
+            ? s.sessions.filter((x) => x.id !== prev.id)
+            : s.sessions
+          return {
+            sessions,
+            activeId,
+            composerDrafts: dropPrev
+              ? dropComposerDraft(s.composerDrafts, prev.id)
+              : s.composerDrafts,
+            // 点开即视为已读（对齐 Cursor 蓝点清除）
+            unreadSessionIds: activeId
+              ? s.unreadSessionIds.filter((x) => x !== activeId)
+              : s.unreadSessionIds,
+            // 切走会话时取消选点，避免条带挂在错误会话上
+            longShotPickSessionId:
+              s.longShotPickSessionId && s.longShotPickSessionId !== activeId
+                ? null
+                : s.longShotPickSessionId
+          }
+        }),
+
+      setComposerDraft: (sessionId, draft) =>
+        set((s) => {
+          if (!composerDraftHasContent(draft)) {
+            return { composerDrafts: dropComposerDraft(s.composerDrafts, sessionId) }
+          }
+          return {
+            composerDrafts: { ...s.composerDrafts, [sessionId]: draft }
+          }
+        }),
+
+      clearComposerDraft: (sessionId) =>
+        set((s) => ({ composerDrafts: dropComposerDraft(s.composerDrafts, sessionId) })),
 
       deleteSession: (id) =>
         set((s) => {
@@ -1058,10 +1360,13 @@ export const useStore = create<AppState>()(
             activeId: s.activeId === id ? (sessions[0]?.id ?? null) : s.activeId,
             loadedSessions: s.loadedSessions.filter((x) => x !== id),
             running: s.running.filter((x) => x !== id),
+            unreadSessionIds: s.unreadSessionIds.filter((x) => x !== id),
             reloadingSessions: s.reloadingSessions.filter((x) => x !== id),
             suppressActivityUntil: dropKey(s.suppressActivityUntil),
             replayCapUntil: dropKey(s.replayCapUntil),
-            replayProgress: dropKey(s.replayProgress)
+            replayProgress: dropKey(s.replayProgress),
+            pendingUserMessages: dropKey(s.pendingUserMessages),
+            composerDrafts: dropComposerDraft(s.composerDrafts, id)
           }
         }),
 
@@ -1092,21 +1397,42 @@ export const useStore = create<AppState>()(
         })),
 
       beginSessionReload: (sessionId, total) =>
-      set((s) => ({
-        // agent 将通过 session/load 重放完整历史，先清掉本地旧记录避免重复
-        sessions: s.sessions.map((x) => (x.id === sessionId ? { ...x, items: [] } : x)),
-        suppressActivityUntil: { ...s.suppressActivityUntil, [sessionId]: Number.MAX_SAFE_INTEGER },
-        replayCapUntil: { ...s.replayCapUntil, [sessionId]: 0 },
-        reloadingSessions: s.reloadingSessions.includes(sessionId)
-          ? s.reloadingSessions
-          : [...s.reloadingSessions, sessionId],
-           replayProgress: {
-      ...s.replayProgress,
-      // total初始为 -1 = 「总数未知」；主进程 replay_begin 到达后会覆盖。
-      // ⚠️ 不能初始为 0 —— 0 表示「已确认无历史」，会让进度条在 replay_begin 之前就收尾。
-      [sessionId]: { applied: 0, total: total ?? -1, lastAt: Date.now() }
-    }
-      })),
+        set((s) => {
+          // agent 将通过 session/load 重放完整历史，先清掉本地旧记录避免重复。
+          // 只收「贴在列表末尾、后面还没有任何内容」的 local 用户消息：
+          // 那些才是「刚发出、agent 可能还没落盘」的；夹在历史中间的 local
+          // 是回显后没摘标记的残留，收了会在重放末尾再挂一条（用户看到的就是
+          // 最新气泡是自己的话、后面没有回复）。
+          const harvested: Extract<ChatItem, { kind: 'user' }>[] = [
+            ...(s.pendingUserMessages[sessionId] ?? [])
+          ]
+          return {
+            sessions: s.sessions.map((x) => {
+              if (x.id !== sessionId) return x
+              for (let i = x.items.length - 1; i >= 0; i--) {
+                const it = x.items[i]
+                if (!isLocalUser(it)) break
+                if (!harvested.some((p) => p.id === it.id)) harvested.unshift(it)
+              }
+              return { ...x, items: [] }
+            }),
+            pendingUserMessages: { ...s.pendingUserMessages, [sessionId]: harvested },
+            suppressActivityUntil: {
+              ...s.suppressActivityUntil,
+              [sessionId]: Number.MAX_SAFE_INTEGER
+            },
+            replayCapUntil: { ...s.replayCapUntil, [sessionId]: 0 },
+            reloadingSessions: s.reloadingSessions.includes(sessionId)
+              ? s.reloadingSessions
+              : [...s.reloadingSessions, sessionId],
+            replayProgress: {
+              ...s.replayProgress,
+              // total初始为 -1 = 「总数未知」；主进程 replay_begin 到达后会覆盖。
+              // ⚠️ 不能初始为 0 —— 0 表示「已确认无历史」，会让进度条在 replay_begin 之前就收尾。
+              [sessionId]: { applied: 0, total: total ?? -1, lastAt: Date.now() }
+            }
+          }
+        }),
 
       markSessionLoaded: (sessionId) =>
         set((s) => ({
@@ -1149,6 +1475,26 @@ advanceReplayProgress: (sessionId, applied) =>
         const now = Date.now()
         const progress = { ...s.replayProgress }
         delete progress[sessionId]
+        const pending = s.pendingUserMessages[sessionId] ?? []
+        const pendingUserMessages = { ...s.pendingUserMessages }
+        delete pendingUserMessages[sessionId]
+        let sessions = markStuckToolsAfterReplay(finalizeReplay(s.sessions, sessionId), sessionId)
+        if (pending.length > 0) {
+          sessions = sessions.map((x) => {
+            if (x.id !== sessionId) return x
+            const ids = new Set(x.items.map((it) => it.id))
+            const userTexts = x.items
+              .filter((it): it is Extract<ChatItem, { kind: 'user' }> => it.kind === 'user')
+              .map((it) => it.text)
+            // id 去重不够：local 乐观气泡与重放出来的气泡 id 不同，
+            // 必须按正文判断「重放里已经有了」—— 否则会在末尾再挂一条。
+            const extra = pending.filter((p) => {
+              if (ids.has(p.id)) return false
+              return !userTexts.some((t) => t.includes(p.text) || p.text.includes(t))
+            })
+            return extra.length === 0 ? x : { ...x, items: [...x.items, ...extra] }
+          })
+        }
         return {
           // ⚠️ 必须同时 finalize：重放走的是 reduceUpdate，最后一条 assistant/thinking
           // 会停在 `streaming: true`（没人再调 finalizeSession —— 那个只在 sendPrompt 里调）。
@@ -1157,7 +1503,8 @@ advanceReplayProgress: (sessionId, applied) =>
           // 顺带兜底：重放是从磁盘读的历史，里面**未完成的工具调用**永远等不到结果
           //（那是上一个 agent 进程的事，新进程不会为它补发终态）—— 不标就是永远转圈。
           // 正是「重启客户端后某张卡一直『执行中』」的成因（2026-10-15）。
-          sessions: markStuckToolsAfterReplay(finalizeReplay(s.sessions, sessionId), sessionId),
+          sessions,
+          pendingUserMessages,
    suppressActivityUntil: { ...s.suppressActivityUntil, [sessionId]: now + 1200 },
 replayCapUntil: { ...s.replayCapUntil, [sessionId]: now + REPLAY_SLIDING_CAP_MS },
       reloadingSessions: s.reloadingSessions.filter((id) => id !== sessionId),
@@ -1221,20 +1568,40 @@ clearLoadedSessions: () =>
       },
 
       pushUserMessage: (sessionId, text, images) =>
-        set((s) => ({
-          sessions: s.sessions.map((x) =>
-            x.id === sessionId
-              ? {
-                  ...x,
-                  items: [
-                    ...finalize(x.items),
-                    { kind: 'user', id: uid(), text, images, at: Date.now() } as ChatItem
-                  ],
-                  updatedAt: Date.now()
-                }
-              : x
-          )
-        })),
+        set((s) => {
+          const item = {
+            kind: 'user' as const,
+            id: uid(),
+            text,
+            images,
+            at: Date.now(),
+            local: true
+          }
+          // 重放尚未结束：消息只进 pending，ChatView 钉在底部。写进 items 会被
+          // 后续 user_message_chunk 拼进历史，或夹在还没放完的回放中间。
+          if (s.reloadingSessions.includes(sessionId)) {
+            return {
+              pendingUserMessages: {
+                ...s.pendingUserMessages,
+                [sessionId]: [...(s.pendingUserMessages[sessionId] ?? []), item]
+              }
+            }
+          }
+          const now = Date.now()
+          return {
+            sessions: s.sessions.map((x) =>
+              x.id === sessionId
+                ? {
+                    ...x,
+                    items: [...finalize(x.items), item],
+                    updatedAt: now,
+                    // 与 applyOne 同理：用户开口即算活动，不能让旧 activityAt 压住
+                    activityAt: now
+                  }
+                : x
+            )
+          }
+        }),
 
       applyStream: ({ sessionId, update }) => set((s) => applyOne(s, [{ sessionId, update }])),
 
@@ -1270,12 +1637,35 @@ clearLoadedSessions: () =>
         })),
 
       setRunning: (sessionId, running) =>
-        set((s) => ({
-          running: running
+        set((s) => {
+          const nextRunning = running
             ? s.running.includes(sessionId)
               ? s.running
               : [...s.running, sessionId]
             : s.running.filter((x) => x !== sessionId)
+
+          let unreadSessionIds = s.unreadSessionIds
+          if (running) {
+            // 又开始跑了：清掉旧的「做完未读」，等本轮结束再标
+            unreadSessionIds = unreadSessionIds.filter((x) => x !== sessionId)
+          } else if (s.activeId !== sessionId && !unreadSessionIds.includes(sessionId)) {
+            // 跑完时用户不在看这个会话 → 蓝点未读
+            unreadSessionIds = [...unreadSessionIds, sessionId]
+          }
+
+          return { running: nextRunning, unreadSessionIds }
+        }),
+
+      markSessionUnread: (sessionId) =>
+        set((s) =>
+          s.unreadSessionIds.includes(sessionId)
+            ? s
+            : { unreadSessionIds: [...s.unreadSessionIds, sessionId] }
+        ),
+
+      clearSessionUnread: (sessionId) =>
+        set((s) => ({
+          unreadSessionIds: s.unreadSessionIds.filter((x) => x !== sessionId)
         })),
 
       finalizeSession: (sessionId) =>
@@ -1359,6 +1749,9 @@ clearLoadedSessions: () =>
       },
       dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
 
+      beginLongShotPick: (sessionId) => set({ longShotPickSessionId: sessionId }),
+      cancelLongShotPick: () => set({ longShotPickSessionId: null }),
+
       activeSession: () => {
         const { sessions, activeId } = get()
         return sessions.find((x) => x.id === activeId)
@@ -1377,9 +1770,25 @@ clearLoadedSessions: () =>
               : 'default'
             : undefined
         const { autoApprove: _legacy, ...rest } = p
+        // 旧持久化可能残留空草稿；启动时一律丢掉（草稿本就不该落盘）
+        const rawSessions = (rest.sessions ?? current.sessions) as SessionMeta[]
+        const sessions = rawSessions.filter((x) => !x.isDraft)
+        const activeId =
+          rest.activeId && sessions.some((x) => x.id === rest.activeId)
+            ? rest.activeId
+            : (sessions[0]?.id ?? null)
+        const catalog =
+          (rest.configOptionCatalog && rest.configOptionCatalog.length > 0
+            ? rest.configOptionCatalog
+            : catalogFromSessions(sessions)) ?? []
         return {
           ...current,
           ...rest,
+          sessions,
+          activeId,
+          configOptionCatalog: catalog,
+          preferredModel: rest.preferredModel ?? current.preferredModel,
+          preferredEffort: rest.preferredEffort ?? current.preferredEffort,
           permissionMode: p.permissionMode ?? legacy ?? current.permissionMode,
           // 旧版本持久化数据里没有这个键；显式兜底防止 rest 里的 undefined 覆盖默认值
           expandedToolCalls: p.expandedToolCalls ?? current.expandedToolCalls,
@@ -1390,6 +1799,7 @@ clearLoadedSessions: () =>
       },
       /**
        * ⚠️ 持久化只留「当前会话」的 items，其余会话只留元数据（标题/时间/工作目录）。
+       * 草稿不落盘：未发过消息的「新任务」对齐 Cursor，关应用即视为撤销。
        *
        * 为什么可以不留：别的会话的 items 在界面里**从来不会显示** ——
        * 侧栏只渲染元数据，悬浮预览也只读 cwd/时间/标题；
@@ -1400,19 +1810,31 @@ clearLoadedSessions: () =>
        * 实测收益（真实数据 5 会话 / 497 条 item / 3.61MB）：负载降到约 1/4，
        * 每一次持久化的 JSON.stringify + localStorage.setItem 同步开销随之等比下降。
        */
-      partialize: (s) => ({
-        sessions: s.sessions.map((x) => ({
-          ...x,
-          items: x.id === s.activeId ? x.items.slice(-120) : []
-        })),
-        activeId: s.activeId,
-        cwd: s.cwd,
-        permissionMode: s.permissionMode,
-        workspaces: s.workspaces,
-        collapsedGroups: s.collapsedGroups,
-        expandedToolCalls: s.expandedToolCalls,
-        collapsedToolCalls: s.collapsedToolCalls
-      })
+      partialize: (s) => {
+        const sessions = s.sessions
+          .filter((x) => !x.isDraft)
+          .map((x) => ({
+            ...x,
+            items: x.id === s.activeId ? x.items.slice(-120) : []
+          }))
+        const activeId =
+          s.activeId && sessions.some((x) => x.id === s.activeId)
+            ? s.activeId
+            : (sessions[0]?.id ?? null)
+        return {
+          sessions,
+          activeId,
+          cwd: s.cwd,
+          permissionMode: s.permissionMode,
+          workspaces: s.workspaces,
+          collapsedGroups: s.collapsedGroups,
+          expandedToolCalls: s.expandedToolCalls,
+          collapsedToolCalls: s.collapsedToolCalls,
+          configOptionCatalog: s.configOptionCatalog,
+          preferredModel: s.preferredModel,
+          preferredEffort: s.preferredEffort
+        }
+      }
     }
   )
 )

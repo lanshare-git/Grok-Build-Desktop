@@ -38,8 +38,8 @@ import {
   IconSearch
 } from './Icons'
 
-/** 会话行的三种状态（判定优先级：待响应 > 输出中 > 完成） */
-type SessionStatus = 'running' | 'pending' | 'done'
+/** 会话行状态（对齐 Cursor：橙待处理 > 输出中 > 蓝未读 > 灰空闲） */
+type SessionStatus = 'pending' | 'running' | 'unread' | 'done'
 
 /** 悬停会话行时浮出的详情卡：完整标题被截断时仍能看清全名，并补上行内放不下的信息 */
 interface PreviewSpec {
@@ -58,6 +58,7 @@ export default function Sidebar(): JSX.Element {
   const collapsedGroups = useStore((s) => s.collapsedGroups)
   const activeId = useStore((s) => s.activeId)
   const running = useStore((s) => s.running)
+  const unreadSessionIds = useStore((s) => s.unreadSessionIds)
   // 待用户响应的两种来源（工具待批准 / grok 主动提问），各按 sessionId 归属，
   // 可同时落在不同任务上——侧栏据此给对应任务打「待响应」标记。
   const permissions = useStore((s) => s.permissions)
@@ -166,14 +167,16 @@ export default function Sidebar(): JSX.Element {
     [visibleSessions, workspaces, homeDir, locale]
   )
 
-  // 状态优先级：待响应 > 输出中 > 完成。
-  // 等待批准时 running 仍是 true，所以待响应要先判，否则会被「输出中」盖掉。
+  // 优先级：待你处理 > 输出中 > 做完未读 > 空闲（对齐 Cursor）
+  // 等待批准时 running 仍可能为 true，所以 pending 要先判。
   const statusOf = (id: string): SessionStatus =>
     permissions.some((p) => p.sessionId === id) || questions.some((q) => q.sessionId === id)
       ? 'pending'
       : running.includes(id)
         ? 'running'
-        : 'done'
+        : unreadSessionIds.includes(id)
+          ? 'unread'
+          : 'done'
 
   const cancelPreview = (): void => {
     if (previewTimer.current !== null) {
@@ -719,11 +722,13 @@ export default function Sidebar(): JSX.Element {
                           <span
                             className={`session-dot status-${status}`}
                             title={
-                              status === 'running'
-                                ? t('sidebar.statusRunning')
-                                : status === 'pending'
-                                  ? t('sidebar.statusPending')
-                                  : t('sidebar.statusDone')
+                              status === 'pending'
+                                ? t('sidebar.statusPending')
+                                : status === 'running'
+                                  ? t('sidebar.statusRunning')
+                                  : status === 'unread'
+                                    ? t('sidebar.statusUnread')
+                                    : t('sidebar.statusDone')
                             }
                           />
                           <div className="session-item-body">
@@ -816,7 +821,11 @@ export default function Sidebar(): JSX.Element {
             <span className="session-preview-title">{sessionDisplayTitle(previewSession, locale)}</span>
             {previewStatus !== 'done' && (
               <span className={`session-status-tag status-${previewStatus}`}>
-                {previewStatus === 'running' ? t('sidebar.tagRunning') : t('sidebar.tagPending')}
+                {previewStatus === 'pending'
+                  ? t('sidebar.tagPending')
+                  : previewStatus === 'running'
+                    ? t('sidebar.tagRunning')
+                    : t('sidebar.tagUnread')}
               </span>
             )}
             <span className="session-preview-time">{relativeTime(sessionActivityAt(previewSession), locale)}</span>

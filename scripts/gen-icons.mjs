@@ -16,6 +16,7 @@
  *   build/icon.png              512×512（Linux 窗口图标 / electron-builder 入口）
  *   build/icons/{size}x{size}.png  Linux deb 桌面图标集（16…512）
  *   build/tray-*.png            32×32 托盘三态（ok 绿 / attention 黄 / error 红）
+ *   build/taskbar-badge-*.png   16×16 任务栏角标（unread 蓝 / pending 橙，对齐 Cursor）
  *
  * ⚠️ 这些文件是「生成物」，但必须提交进仓库：
  *   dev 模式（npm run dev）不走打包，src/main/index.ts / src/main/tray.ts 开发态直接读
@@ -263,10 +264,9 @@ const ICON_PNG_SIZE = 512 // Linux 窗口图标 / electron-builder 入口
 const LINUX_ICON_SIZES = [16, 32, 48, 64, 128, 256, 512]
 const TRAY_SIZE = 32
 
-// 托盘三态配色（预留：加 `--tray` 才生成，当前项目无托盘）
-const TRAY_STATES = {
-  ok: [48, 164, 108], // 绿 · 正常
-  attention: [245, 165, 36], // 黄 · 需要注意
+// 托盘状态角标：就绪态不加绿点（正常即默认外观）；黄/红才打点提醒
+const TRAY_BADGE_STATES = {
+  attention: [245, 165, 36], // 黄 · 启动中 / 空闲 / 已停止
   error: [229, 72, 77] // 红 · 错误
 }
 
@@ -282,14 +282,73 @@ function iconOutputs() {
 }
 
 function trayOutputs() {
-  return Object.entries(TRAY_STATES).map(([state, rgb]) => [
-    join(ROOT, 'build', `tray-${state}.png`),
-    encodePng(TRAY_SIZE, drawTrayIcon(TRAY_SIZE, rgb))
+  return [
+    // ok：纯品牌图标，不带绿点
+    [join(ROOT, 'build', 'tray-ok.png'), encodePng(TRAY_SIZE, drawAppIcon(TRAY_SIZE))],
+    ...Object.entries(TRAY_BADGE_STATES).map(([state, rgb]) => [
+      join(ROOT, 'build', `tray-${state}.png`),
+      encodePng(TRAY_SIZE, drawTrayIcon(TRAY_SIZE, rgb))
+    ])
+  ]
+}
+
+/**
+ * 任务栏 overlay 角标：透明底 + 带深色描边的实心圆。
+ * Windows `setOverlayIcon` 常用 16×16；描边保证浅色任务栏上也能看见。
+ */
+function drawOverlayBadge(size, rgb) {
+  const SS = 4
+  const cx = size / 2 - 0.5
+  const cy = size / 2 - 0.5
+  const rFill = size * 0.34
+  const rRing = size * 0.42
+  const ring = [26, 28, 33]
+  const out = Buffer.alloc(size * size * 4)
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      if (Math.hypot(x - cx, y - cy) > rRing + 1.5) continue
+      let f = 0
+      let r = 0
+      for (let sy = 0; sy < SS; sy++) {
+        for (let sx = 0; sx < SS; sx++) {
+          const px = x + (sx + 0.5) / SS - 0.5
+          const py = y + (sy + 0.5) / SS - 0.5
+          const d = Math.hypot(px - cx, py - cy)
+          if (d <= rFill) f++
+          else if (d <= rRing) r++
+        }
+      }
+      const n = SS * SS
+      const cover = (f + r) / n
+      if (cover === 0) continue
+      const bw = f + r
+      const o = (y * size + x) * 4
+      out[o] = Math.round((f * rgb[0] + r * ring[0]) / bw)
+      out[o + 1] = Math.round((f * rgb[1] + r * ring[1]) / bw)
+      out[o + 2] = Math.round((f * rgb[2] + r * ring[2]) / bw)
+      out[o + 3] = Math.round(255 * cover)
+    }
+  }
+  return out
+}
+
+// 与侧栏色点一致：蓝=做完未读，橙=要你处理
+const BADGE_STATES = {
+  unread: [47, 111, 237],
+  pending: [180, 83, 9]
+}
+const BADGE_SIZE = 16
+
+function badgeOutputs() {
+  return Object.entries(BADGE_STATES).map(([state, rgb]) => [
+    join(ROOT, 'build', `taskbar-badge-${state}.png`),
+    encodePng(BADGE_SIZE, drawOverlayBadge(BADGE_SIZE, rgb))
   ])
 }
 
 function allOutputs() {
-  return [...iconOutputs(), ...trayOutputs()]
+  return [...iconOutputs(), ...trayOutputs(), ...badgeOutputs()]
 }
 
 if (process.argv.includes('--check')) {

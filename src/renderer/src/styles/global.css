@@ -326,12 +326,12 @@ pre {
   --row-bg: var(--bg-raised);
 }
 
-/* 需要用户响应的会话：左侧蓝色高亮条，即使在折叠分组里也能一眼看到 */
+/* 需要用户响应的会话：左侧橙色高亮条（对齐 Cursor 橙点 = 等你） */
 .session-item.is-pending {
-  box-shadow: inset 3px 0 0 var(--accent);
+  box-shadow: inset 3px 0 0 var(--warn);
 }
 .session-item.is-pending.is-active {
-  box-shadow: var(--shadow-sm), inset 3px 0 0 var(--accent);
+  box-shadow: var(--shadow-sm), inset 3px 0 0 var(--warn);
 }
 
 .session-item-main {
@@ -350,26 +350,37 @@ pre {
   gap: 8px;
 }
 
-/* 左侧状态点：三种状态用三种颜色区分 */
+/* 左侧状态点（对齐 Cursor）：橙=等你 / 转圈=输出中 / 蓝=做完未读 / 灰=空闲 */
 .session-dot {
   flex: none;
   width: 8px;
   height: 8px;
   border-radius: 50%;
 }
-/* 输出中 = 橙；待响应 = 蓝（与常见「蓝=需关注/未处理」直觉对齐） */
-.session-dot.status-running {
+.session-dot.status-pending {
   background: var(--warn);
   box-shadow: 0 0 0 3px var(--warn-soft);
   animation: dot-pulse-warn 1.3s ease-in-out infinite;
 }
-.session-dot.status-pending {
+.session-dot.status-running {
+  background: transparent;
+  border: 1.5px solid color-mix(in srgb, var(--text-muted) 55%, transparent);
+  border-top-color: var(--text);
+  box-shadow: none;
+  animation: dot-spin 0.75s linear infinite;
+}
+.session-dot.status-unread {
   background: var(--accent);
   animation: dot-pulse 1.1s ease-in-out infinite;
 }
 .session-dot.status-done {
   background: var(--text-muted);
   opacity: 0.35;
+}
+@keyframes dot-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 @keyframes dot-pulse {
   0%,
@@ -399,11 +410,15 @@ pre {
   padding: 0 6px;
   border-radius: 999px;
 }
-.session-status-tag.status-running {
+.session-status-tag.status-pending {
   color: var(--warn);
   background: var(--warn-soft);
 }
-.session-status-tag.status-pending {
+.session-status-tag.status-running {
+  color: var(--text);
+  background: var(--bg-subtle);
+}
+.session-status-tag.status-unread {
   color: var(--accent);
   background: var(--accent-soft);
 }
@@ -1002,6 +1017,50 @@ pre {
   scroll-behavior: smooth;
   /* 重放细线用 absolute 定位在顶部，必须以本容器为参照 */
   position: relative;
+}
+
+/* 长截屏选点：十字光标 + 悬停描边，提示可点 */
+.chat.is-long-shot-picking {
+  cursor: crosshair;
+}
+.chat.is-long-shot-picking [data-long-shot-target] {
+  outline: 1px dashed transparent;
+  outline-offset: 4px;
+  border-radius: 6px;
+  transition: outline-color 0.12s ease;
+}
+.chat.is-long-shot-picking [data-long-shot-target]:hover {
+  outline-color: var(--accent, #3b82f6);
+}
+.chat.is-long-shot-capturing {
+  cursor: wait;
+  pointer-events: none;
+}
+
+.long-shot-bar {
+  position: sticky;
+  top: 0;
+  z-index: 8;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px 14px;
+  margin: 0;
+  background: color-mix(in srgb, var(--bg) 92%, var(--accent, #3b82f6));
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(8px);
+}
+.long-shot-bar-hint {
+  flex: 1;
+  min-width: 140px;
+  font-size: 12.5px;
+  color: var(--text);
+}
+.long-shot-bar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 .chat-inner {
@@ -3888,11 +3947,12 @@ pre {
   padding: 13px 16px 14px;
   animation: prompt-in 0.14s ease;
 }
+/* 待授权 / 待回答：橙 = 等你处理（与侧栏 pending 同色，对齐 Cursor） */
 .prompt-card-perm {
   border-left-color: var(--warn);
 }
 .prompt-card-question {
-  border-left-color: var(--accent);
+  border-left-color: var(--warn);
 }
 
 .prompt-head {
@@ -3913,8 +3973,8 @@ pre {
   background: var(--warn-soft);
 }
 .prompt-badge-question {
-  color: var(--accent);
-  background: var(--accent-soft);
+  color: var(--warn);
+  background: var(--warn-soft);
 }
 .prompt-title {
   font-size: 13.5px;

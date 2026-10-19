@@ -7,6 +7,7 @@ import type {
   BillingQuota,
   CloseAction,
   ConnectionEvent,
+  DesktopPermToastMode,
   DiagnosticsReport,
   DiskUsageReport,
   GrokAccount,
@@ -138,6 +139,23 @@ export interface GrokDesktopApi {
   }>
   /** 拉起系统截图（Win+Shift+S 截图模式），结果进剪贴板，用户再 Ctrl+V 粘贴 */
   screenshotSnip(): Promise<void>
+  /**
+   * 截取当前窗口某一矩形区域为 PNG。
+   * 坐标是相对窗口客户区的 DIP（与 getBoundingClientRect 一致）。
+   */
+  capturePageRect(rect: {
+    x: number
+    y: number
+    width: number
+    height: number
+  }): Promise<Uint8Array>
+  /**
+   * 长截屏落盘：默认写入剪贴板；另存为对话框可取消（剪贴板仍保留）。
+   */
+  saveLongShotPng(args: {
+    png: Uint8Array
+    defaultName: string
+  }): Promise<{ ok: boolean; path?: string; canceled?: boolean; clipboard: boolean }>
   /**
    * 把 grok 下发的媒体地址归一化为可在渲染进程直接加载的 URL：
    * - http(s):// / data: / grok-asset:// 原样返回
@@ -280,6 +298,10 @@ export interface GrokDesktopApi {
   getDeletePurgeDefault(): Promise<boolean>
   /** 写入该默认值 */
   setDeletePurgeDefault(value: boolean): Promise<void>
+  /** 读取屏幕右下角桌面授权浮窗模式 */
+  getDesktopPermToast(): Promise<DesktopPermToastMode>
+  /** 写入屏幕右下角桌面授权浮窗模式 */
+  setDesktopPermToast(mode: DesktopPermToastMode): Promise<void>
   /** 主进程隐藏窗口到托盘 */
   hideWindow(): Promise<void>
   /** 主进程标记退出并真正退出应用 */
@@ -303,6 +325,12 @@ export interface GrokDesktopApi {
   onMeta(cb: (meta: AgentMetaEvent) => void): () => void
   /** 系统通知被点击：切到对应会话处理待授权/提问 */
   onFocusSession(cb: (event: { sessionId: string }) => void): () => void
+  /** 授权已在别处处理（桌面浮窗或本窗口）：清掉对应 permission 卡 */
+  onPermissionSettled(cb: (event: { requestId: number }) => void): () => void
+  /** 汇报当前正在看的会话（主进程据此在「已打开该会话」时收起桌面授权浮窗） */
+  reportActiveSession(sessionId: string | null): Promise<void>
+  /** 汇报任务栏角标（对齐 Cursor：蓝=做完未读，橙=要你处理） */
+  reportTaskbarBadge(kind: 'none' | 'unread' | 'pending'): Promise<void>
   /** 语言切换广播（任一入口切换后，所有窗口同步） */
   onLocaleChanged(cb: (locale: Locale) => void): () => void
 }

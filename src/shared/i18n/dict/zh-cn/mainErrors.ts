@@ -42,5 +42,8 @@ export const mainErrors = {
   },
   exportMarkdown: {
     dialogTitle: '导出会话为 Markdown'
+  },
+  longShot: {
+    dialogTitle: '保存会话长截屏'
   }
 }

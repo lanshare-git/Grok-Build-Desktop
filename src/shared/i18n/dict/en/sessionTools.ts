@@ -3,6 +3,8 @@ import type { sessionTools as zh } from '../zh-cn/sessionTools'
 export const sessionTools: typeof zh = {
   exportMarkdown: 'Export as Markdown',
   exporting: 'Exporting…',
+  longShot: 'Long screenshot…',
+  longShotTitle: 'Capture from a chosen message to the bottom; copy to clipboard and optionally save as PNG',
   trace: 'Export diagnostics bundle',
   tracing: 'Packaging…',
   traceTitleDraft: 'Draft sessions are not persisted yet, so no diagnostics bundle can be exported',

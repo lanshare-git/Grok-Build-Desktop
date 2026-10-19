@@ -3,6 +3,8 @@ import type { sessionTools as zh } from '../zh-cn/sessionTools'
 export const sessionTools: typeof zh = {
   exportMarkdown: 'Markdown としてエクスポート',
   exporting: 'エクスポート中…',
+  longShot: '長截図…',
+  longShotTitle: '指定メッセージから末尾まで截図し、クリップボードへコピー（PNG として保存も可）',
   trace: '診断パッケージをエクスポート',
   tracing: 'パッケージ化中…',
   traceTitleDraft: '下書きセッションはまだ保存されていないため、診断パッケージをエクスポートできません',

@@ -1,6 +1,6 @@
 /** 主进程 IPC 注册：把 AgentService 的能力与事件暴露给渲染进程 */
 
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, shell } from 'electron'
 import { writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -41,7 +41,17 @@ import {
   updateMarketplaces,
   pluginDetails
 } from './grok-cli'
-import { clearAllAttention, clearAttention, notifyAwaitingUser } from './attention'
+import {
+  clearAllAttention,
+  clearAttention,
+  dismissPermToast,
+  getDesktopPermToastMode,
+  notifyAwaitingUser,
+  setActiveSessionId,
+  setDesktopPermToastMode,
+  showMainWindow
+} from './attention'
+import { setTaskbarBadge, type TaskbarBadgeKind } from './taskbar-badge'
 import { hideWindow, requestQuit, refreshTrayLocale } from './tray'
 import { getCurrentLocale, setCurrentLocale, t } from './i18n'
 import {
@@ -53,6 +63,7 @@ import {
 } from './mcp'
 import type {
   CloseAction,
+  DesktopPermToastMode,
   GrokAccount,
   McpServer,
   McpServerInput,
@@ -85,15 +96,17 @@ export function registerIpc(service: AgentService): void {
   })
   service.on('permission', (event) => {
     broadcast(CH.pushPermission, event)
-    // 窗口失焦 / 藏托盘时：系统通知 + 任务栏闪烁（前台只走界面内联面板）
+    // 窗口失焦 / 最小化 / 藏托盘时：屏幕右下角置顶浮窗（可直接点按钮）
+    const toolLabel =
+      event.toolCall?.title ?? event.toolCall?.toolName ?? t('tool.meta.toolLabel')
     notifyAwaitingUser({
       kind: 'perm',
       requestId: event.requestId,
       sessionId: event.sessionId,
       title: t('common.promptPermTitle'),
-      body: t('common.notifyPermBody', {
-        name: event.toolCall?.title ?? event.toolCall?.toolName ?? t('tool.meta.toolLabel')
-      })
+      body: t('common.notifyPermBody', { name: toolLabel }),
+      toolLabel,
+      options: event.options
     })
   })
   // 提问事件同样必须广播到渲染层，否则任务内的提问面板永远等不到数据
@@ -148,8 +161,30 @@ export function registerIpc(service: AgentService): void {
     async (_e, args: { requestId: number; optionId: string | null }) => {
       clearAttention('perm', args.requestId)
       service.respondPermission(args.requestId, args.optionId)
+      broadcast(CH.pushPermissionSettled, { requestId: args.requestId })
     }
   )
+  // 桌面授权浮窗点按钮：主进程直接回传，不强制唤起主窗口
+  ipcMain.handle(
+    CH.toastPermissionDecide,
+    async (_e, args: { requestId: number; optionId: string | null }) => {
+      clearAttention('perm', args.requestId)
+      service.respondPermission(args.requestId, args.optionId)
+      broadcast(CH.pushPermissionSettled, { requestId: args.requestId })
+    }
+  )
+  ipcMain.handle(CH.toastOpenApp, async (_e, args: { sessionId: string }) => {
+    showMainWindow(args.sessionId)
+  })
+  ipcMain.handle(CH.toastPermissionDismiss, async (_e, args: { requestId: number }) => {
+    dismissPermToast(args.requestId)
+  })
+  ipcMain.handle(CH.reportActiveSession, async (_e, args: { sessionId: string | null }) => {
+    setActiveSessionId(args.sessionId)
+  })
+  ipcMain.handle(CH.reportTaskbarBadge, async (_e, args: { kind: TaskbarBadgeKind }) => {
+    setTaskbarBadge(args.kind)
+  })
   ipcMain.handle(
     CH.agentQuestionResponse,
     async (_e, args: { requestId: number; answers: Record<string, string> | null }) => {
@@ -260,6 +295,60 @@ export function registerIpc(service: AgentService): void {
     // 用户在输入框 Ctrl+V 即可附带截图提问
     await shell.openExternal('ms-screenclip:')
   })
+
+  // 长截屏：截取窗口客户区某一矩形（DIP）。渲染层滚屏拼图时每段调一次。
+  ipcMain.handle(
+    CH.capturePageRect,
+    async (
+      event,
+      rect: { x: number; y: number; width: number; height: number }
+    ): Promise<Uint8Array> => {
+      const win = BrowserWindow.fromWebContents(event.sender)
+      if (!win) throw new Error('窗口不可用')
+      const x = Math.max(0, Math.round(Number(rect?.x) || 0))
+      const y = Math.max(0, Math.round(Number(rect?.y) || 0))
+      const width = Math.max(1, Math.round(Number(rect?.width) || 0))
+      const height = Math.max(1, Math.round(Number(rect?.height) || 0))
+      const image = await win.webContents.capturePage({ x, y, width, height })
+      return image.toPNG()
+    }
+  )
+
+  // 长截屏落盘：先写入剪贴板（便于立刻粘贴到别处），再弹另存为（可取消）。
+  ipcMain.handle(
+    CH.saveLongShotPng,
+    async (
+      event,
+      args: { png: Uint8Array | Buffer; defaultName: string }
+    ): Promise<{ ok: boolean; path?: string; canceled?: boolean; clipboard: boolean }> => {
+      const buf = Buffer.from(args?.png ?? [])
+      if (buf.length === 0) return { ok: false, clipboard: false }
+      let wroteClipboard = false
+      try {
+        clipboard.writeImage(nativeImage.createFromBuffer(buf))
+        wroteClipboard = true
+      } catch {
+        /* 剪贴板失败不阻断另存为 */
+      }
+      const win = BrowserWindow.fromWebContents(event.sender) ?? undefined
+      const safeName = String(args?.defaultName || 'long-shot')
+        .replace(/[\\/:*?"<>|]/g, '_')
+        .slice(0, 60)
+      const opts = {
+        title: t('mainErrors.longShot.dialogTitle'),
+        defaultPath: join(app.getPath('pictures'), `${safeName}.png`),
+        filters: [{ name: 'PNG', extensions: ['png'] }]
+      }
+      const result = win
+        ? await dialog.showSaveDialog(win, opts)
+        : await dialog.showSaveDialog(opts)
+      if (result.canceled || !result.filePath) {
+        return { ok: wroteClipboard, canceled: true, clipboard: wroteClipboard }
+      }
+      await writeFile(result.filePath, buf)
+      return { ok: true, path: result.filePath, clipboard: wroteClipboard }
+    }
+  )
 
   // 媒体资源地址归一化：file:// / 本地绝对路径 -> grok-asset://；http(s)/data: 原样返回
   ipcMain.handle(CH.assetResolve, (_e, rawUri: string): string => resolveAssetUri(rawUri))
@@ -488,6 +577,12 @@ export function registerIpc(service: AgentService): void {
 
   ipcMain.handle(CH.deletePurgeDefaultSet, (_e, value: boolean): void => {
     writeConfig({ deleteDiskFilesByDefault: value })
+  })
+
+  ipcMain.handle(CH.desktopPermToastGet, (): DesktopPermToastMode => getDesktopPermToastMode())
+  ipcMain.handle(CH.desktopPermToastSet, (_e, mode: DesktopPermToastMode): void => {
+    writeConfig({ desktopPermToast: mode })
+    setDesktopPermToastMode(mode)
   })
 
   // 渲染层弹窗里选择「隐藏到托盘」后调用：把窗口藏到托盘

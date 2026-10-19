@@ -30,6 +30,15 @@ export default defineConfig({
       alias: {
         '@shared': resolve('src/shared')
       }
+    },
+    build: {
+      rollupOptions: {
+        input: {
+          index: resolve('src/preload/index.ts'),
+          // 屏幕右下角授权浮窗专用，能力面极窄
+          toast: resolve('src/preload/toast.ts')
+        }
+      }
     }
   },
   renderer: {

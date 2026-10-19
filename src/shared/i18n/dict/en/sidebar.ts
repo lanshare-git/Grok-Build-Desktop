@@ -26,9 +26,11 @@ export const sidebar: typeof zh = {
   removeFromList: 'Remove from the workspace list',
   statusRunning: 'Generating',
   statusPending: 'Needs your response',
-  statusDone: 'Done',
+  statusUnread: 'Finished (unread)',
+  statusDone: 'Idle',
   tagRunning: 'Generating',
   tagPending: 'Pending',
+  tagUnread: 'Unread',
   renameInputTitle:
     "Edit directly; leave empty or restore the original title to follow grok's automatic title again",
   sessionTitleCustom: (vars: { title: string; original: string }) =>

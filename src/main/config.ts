@@ -6,7 +6,7 @@
 import { app } from 'electron'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import type { CloseAction } from '../shared/types'
+import type { CloseAction, DesktopPermToastMode } from '../shared/types'
 import type { Locale } from '../shared/i18n/types'
 
 export interface AppConfig {
@@ -35,6 +35,13 @@ export interface AppConfig {
    */
   deleteDiskFilesByDefault: boolean
   /**
+   * 屏幕右下角桌面授权浮窗：
+   *  - 'on'：后台或其它会话有待授权时弹出（默认）
+   *  - 'off'：不弹（只靠会话内联 + 侧栏色点）
+   * 旧值 'background' 读入时归一为 'on'。
+   */
+  desktopPermToast: DesktopPermToastMode
+  /**
    * 界面语言：'zh-CN' | 'en' | 'ja'；null = 跟随系统（启动时按 app.getLocale() 归一）。
    * 语言的唯一事实源在这里；渲染进程 store.locale 只是它的缓存。
    */
@@ -46,6 +53,7 @@ const DEFAULTS: AppConfig = {
   proxyAutoDetected: false,
   closeAction: null,
   deleteDiskFilesByDefault: true,
+  desktopPermToast: 'on',
   locale: null
 }
 
@@ -53,12 +61,20 @@ function configFile(): string {
   return join(app.getPath('userData'), 'config.json')
 }
 
+function normalizeDesktopPermToast(raw: unknown): DesktopPermToastMode {
+  return raw === 'off' ? 'off' : 'on'
+}
+
 export function readConfig(): AppConfig {
   try {
     const file = configFile()
     if (!existsSync(file)) return { ...DEFAULTS }
     const parsed = JSON.parse(readFileSync(file, 'utf8')) as Partial<AppConfig>
-    return { ...DEFAULTS, ...parsed }
+    return {
+      ...DEFAULTS,
+      ...parsed,
+      desktopPermToast: normalizeDesktopPermToast(parsed.desktopPermToast)
+    }
   } catch {
     return { ...DEFAULTS }
   }

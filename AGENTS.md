@@ -98,7 +98,7 @@ src/
    - **`bypassPermissions` 不等于「绝对不弹」**：deny 规则和 hook 仍生效（types.ts 659 行）。要排查时查 `~/.grok/sessions/<cwd>/permission.toml` 的 `disallowed_*` 段，以及 grok 的 hook 配置。
 5. **安全边界**：渲染进程保持 `contextIsolation` 开启、`nodeIntegration` 关闭，只通过 preload 暴露白名单 API；外部链接仅允许 `http/https`。
 6. **删除操作一律用 Python 直删**（`shutil.rmtree` / `os.remove`）。本环境 `rm` 会被 safe-delete 包装器接管移入回收站，且移动需独占句柄——若文件被 WorkBuddy 自己占用会直接失败。详见下方坑 7。
-7. **`build/` 是脚本产物，不是手工资源**：`icon.ico` + `tray-*.png` 共 4 个文件由 `npm run gen:icons`（`scripts/gen-icons.mjs`）生成——白色标志是从设计稿描摹的轮廓多边形（`scripts/icon-outline.json`，even-odd 填充），圆角方底/配色/托盘 badge 是脚本参数。确定性生成，两次运行字节一致；改外观 = 改 JSON 或参数后重跑，**不要手改二进制**。改了生成器忘重生成会被 `--check` 在构建期暴露（覆盖全部 4 个产物）。所有产物必须提交进仓库（dev 模式不走打包，直接读 `build/`）。曾输出的 512px `icon.png` 因无引用已移除；需要大图临时改 `ICON_SIZE` 跑一次。重描轮廓的工具链：`.workbuddy/tmp/trace-outline.py`（依赖 venv 里的 pillow + opencv-python-headless，用法见脚本头注释）。
+7. **`build/` 是脚本产物，不是手工资源**：`icon.ico` + `tray-*.png` + `taskbar-badge-*.png` 等由 `npm run gen:icons`（`scripts/gen-icons.mjs`）生成——白色标志是从设计稿描摹的轮廓多边形（`scripts/icon-outline.json`，even-odd 填充），圆角方底/配色/托盘 badge / 任务栏角标是脚本参数。确定性生成，两次运行字节一致；改外观 = 改 JSON 或参数后重跑，**不要手改二进制**。改了生成器忘重生成会被 `--check` 在构建期暴露。所有产物必须提交进仓库（dev 模式不走打包，直接读 `build/`）。重描轮廓的工具链：`.workbuddy/tmp/trace-outline.py`（依赖 venv 里的 pillow + opencv-python-headless，用法见脚本头注释）。
 8. **托盘资源走 `build/` + extraResources，不走 src/assets**：`package.json` 的 `extraResources: ["build"]` 把整个 build/ 拷到 `resources/build/`。`src/main/tray.ts` 打包态读 `process.resourcesPath/build/`、开发态读项目 `build/`——与窗口图标 `iconPath()` 同一条通道。**不要学 PeerSync 把托盘图放 src/assets**：那要求源码不编译直接进 asar（PeerSync 用 `__dirname` 相对路径）；Grok Build 的 main 是编译产物（`out/**`），src 下的资源不会进包。托盘状态直接挂 `service.on('state')`（主进程是状态源头，无需 IPC 转发）。
 
 ## 已知坑（踩过的，别重踩）

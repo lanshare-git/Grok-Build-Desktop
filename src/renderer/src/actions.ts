@@ -1,10 +1,18 @@
 /** 界面动作集合 —— 统一处理 IPC 调用、错误提示与状态流转 */
 
-import { finishReplayIfIdle } from './stream-queue'
+import { t as tShared } from '@shared/i18n'
+import { finishReplayIfIdle, waitForReplay } from './stream-queue'
 import { useStore } from './store'
+import {
+  cancelSessionTurn,
+  consumeIdleCancelled,
+  noteTurnEnded,
+  noteTurnStarted
+} from './turn-idle'
 import { isLockedChat, sameDir } from './utils'
 import type {
   CloseAction,
+  DesktopPermToastMode,
   GrokAccount,
   ImageAttachment,
   McpServerInput,
@@ -193,8 +201,14 @@ export async function chooseWorkspace(): Promise<void> {
     return
   }
 
-  // 旧会话若是刚建出来还没说过话的空壳，切目录后顺手清掉，免得堆垃圾
-  const emptyPrevId = current && current.items.length === 0 ? current.id : null
+  // 旧会话若是刚建出来还没说过话、输入框也空的空壳，切目录后顺手清掉
+  const draft = current ? store.composerDrafts[current.id] : undefined
+  const emptyPrevId =
+    current &&
+    current.items.length === 0 &&
+    !(draft && (draft.text.trim() || draft.attachments.length > 0))
+      ? current.id
+      : null
 
   await newSession(dir)
 
@@ -278,6 +292,9 @@ export async function resumeSession(sessionId: string, cwd: string): Promise<voi
     // 主进程报的重放总条数：供 stream-queue 判断「是否已排空」——
  // 绝不能靠「队列瞬时为空」判断（update 还在路上时会提前宣告完成）。
     finishReplayIfIdle(sessionId, res?.replayed ?? 0)
+    // session/load 会往 events.jsonl 追加 mcp_*；用过滤后的回合时间校正侧栏，
+    // 避免「只是点开看一眼」把活动时间刷成现在（见 session-activity.ts）。
+    void useStore.getState().refreshActivity([sessionId])
   } catch (err) {
     const raw = cleanError(err)
     // grok 按「编码 cwd + 会话 ID」拼路径找会话：磁盘上那份数据被删/被搬走后，
@@ -340,8 +357,15 @@ export async function sendPrompt(text: string, images?: ImageAttachment[]): Prom
       ? 'plan'
       : session.pendingPermissionMode ?? store.permissionMode
     try {
-      const result = await window.grok.newSession({ cwd: session.cwd, permissionMode: mode })
+      const result = await window.grok.newSession({
+        cwd: session.cwd,
+        permissionMode: mode,
+        // 草稿阶段用户选的模型/强度；没有手选则用全局 preferred
+        model: session.pendingModel ?? store.preferredModel ?? undefined,
+        reasoningEffort: session.pendingEffort ?? store.preferredEffort ?? undefined
+      })
       store.materializeDraft(session.id, { id: result.sessionId, configOptions: result.configOptions })
+      store.rememberConfigCatalog(result.configOptions)
     } catch (err) {
       useStore.getState().appendNotice(session.id, `创建会话失败：${cleanError(err)}`, 'error')
       const s = useStore.getState()
@@ -355,18 +379,28 @@ export async function sendPrompt(text: string, images?: ImageAttachment[]): Prom
   const activeId = useStore.getState().activeId
   if (!activeId) return
 
+  // 先上屏：重放中会进 pendingUserMessages，ChatView 钉在底部；否则进 items。
+  // 草稿路径已经 push 过同一条，绝不能再 push（materializeDraft 继承了 items）。
+  if (!pushedByDraft) {
+    useStore.getState().pushUserMessage(activeId, text, images)
+  }
+
   store.setRunning(activeId, true)
   // 计入在飞回合：agent 正在跑时再发一条，这里就 +1；finally 里只有归零才收尾
   activeTurns.set(activeId, (activeTurns.get(activeId) ?? 0) + 1)
+  // 空闲兜底：停更太久且无工具在飞时自动 cancel，避免「总结写完了还一直正在工作」
+  noteTurnStarted(activeId)
 
   try {
     // 应用重启后 agent 进程是全新的，未加载过的会话必须先 session/load，
     // 否则 session/prompt 会报 Invalid params (unknown session id)。
     // （草稿 materialize 后已在 agent 中新建并标记 loaded，会跳过此分支。）
-    if (!useStore.getState().loadedSessions.includes(activeId)) {
-      useStore.getState().beginSessionReload(activeId)
+    const st = useStore.getState()
+    const alreadyReloading = st.reloadingSessions.includes(activeId)
+    if (!st.loadedSessions.includes(activeId) && !alreadyReloading) {
+      st.beginSessionReload(activeId)
       try {
- const res = await window.grok.loadSession(activeId, session.cwd)
+        const res = await window.grok.loadSession(activeId, session.cwd)
         useStore.getState().markSessionLoaded(activeId)
         await applyPermissionModeToSession(activeId)
         finishReplayIfIdle(activeId, res?.replayed ?? 0)
@@ -375,16 +409,10 @@ export async function sendPrompt(text: string, images?: ImageAttachment[]): Prom
         throw err
       }
     }
-    // 必须在上面的重放之后才落这条用户消息：beginSessionReload 会清空 items，
-    // 先 push 的话这条消息会被清掉，界面上就「发出去的消息不见了」。
-    //
-    // ⚠️ 草稿路径**已经 push 过同一条**（见上方 isDraft 分支），且 materializeDraft
-    // 用 `...draft` 把 items 整个继承了下来（那条用户消息就在里面）。
-    // 这里再 push 一次就会出现**两条一模一样的用户消息**（草稿新建会话必现）。
-    // 用 pushedByDraft 标记跳过，而不是删掉草稿那次 push ——
-    // 草稿那次必须在 newSession 之前落，否则会话一materialize 消息就丢了。
-    if (!pushedByDraft) {
-      useStore.getState().pushUserMessage(activeId, text, images)
+    // loadSession 返回 ≠ 重放已画完。必须等 reloading 结束，用户消息才会被
+    // flush 到历史末尾；否则会夹在半截回放里，底部看起来像「没发出去」。
+    if (useStore.getState().reloadingSessions.includes(activeId)) {
+      await waitForReplay(activeId)
     }
     await window.grok.prompt(activeId, text, images)
   } catch (err) {
@@ -395,6 +423,10 @@ export async function sendPrompt(text: string, images?: ImageAttachment[]): Prom
     const s = useStore.getState()
     const target = s.activeId ?? activeId
     s.finalizeSession(target)
+    // 空闲自动 cancel：等 prompt 真正返回再提示；中途又有 update 则 pending 已清，不贴。
+    if (consumeIdleCancelled(activeId)) {
+      s.appendNotice(activeId, tShared(s.locale, 'chat.turnIdleCancelled'), 'warn')
+    }
     // 只有该会话**没有其它在飞回合**时才真正结束。
     // 排队发送时先完成的那条不能把还在队列里的那条标记成结束，否则界面提前解锁。
     const left = (activeTurns.get(activeId) ?? 1) - 1
@@ -402,6 +434,7 @@ export async function sendPrompt(text: string, images?: ImageAttachment[]): Prom
       activeTurns.set(activeId, left)
     } else {
       activeTurns.delete(activeId)
+      noteTurnEnded(activeId)
       s.setRunning(target, false)
       // 客户端兜底：回合已结束（正常返回 / 报错 / 超时 / 被 ■ 中断），
       // 但仍有工具卡停在 in_progress —— agent **不会**补发终态
@@ -418,42 +451,14 @@ export async function sendPrompt(text: string, images?: ImageAttachment[]): Prom
   }
 }
 
-/**
- * 点 ■ 之后，隔这么久再扫一次「仍在飞的工具」。
- *
- * 正常路径是 `session/cancel` 让 prompt 立刻返回 → sendPrompt 的 finally 兜底。
- * 但实测有另一种情况：prompt **迟迟不返回**（主进程对单条 prompt 的超时是 15 分钟），
- * finally 迟迟不跑，那些工具卡就一直转圈。用户既然已经点了停止，
- * 就没理由让他盯着一个永远转的圈 —— 隔一会儿由客户端清算。
- *
- * 取 15s：正常路径下 finally 早就扫过了，这里只是兜底；慢一点不影响体感，
- * 却能避免「agent 只是慢，晚几秒才补结果」被误判（真补回来了会自动覆盖回真实状态）。
- */
-const CANCEL_SWEEP_MS = 15_000
-
 export function cancelCurrent(): void {
   const store = useStore.getState()
   const session = store.activeSession()
   if (!session) return
-  const id = session.id
-  // 记下**此刻**还没结束的工具：延迟扫描只清算这批，
-  // 免得把「停止之后又新起的那一轮」的工具误伤成中断。
-  const pendingToolCallIds: string[] = []
-  for (const it of session.items) {
-    if (it.kind === 'tool' && (it.status === 'in_progress' || it.status === 'pending')) {
-      pendingToolCallIds.push(it.toolCallId)
-    }
-  }
-
-  void window.grok.cancel(id)
-  // 主进程会把挂起的提问/权限按取消结算，这里同步撤下界面上的待响应面板，
-  // 否则「停止」后那张卡仍留在输入框上方（旧版是模态遮罩不消失）
+  // 主进程会把挂起的提问/权限按取消结算；点 ■ 时清掉全部待响应面板
+  //（用户明确要停当前窗口的交互）。空闲自动 cancel 只清本会话，见 cancelSessionTurn。
   store.clearAllPrompts()
-
-  if (pendingToolCallIds.length === 0) return
-  window.setTimeout(() => {
-    useStore.getState().markStuckTools(id, undefined, pendingToolCallIds)
-  }, CANCEL_SWEEP_MS)
+  cancelSessionTurn(session.id)
 }
 
 /**
@@ -471,7 +476,9 @@ export async function editAndResend(
 
   // 兜底：若 agent 仍在运行，先中断当前回合
   if (store.running.includes(session.id)) {
-    void window.grok.cancel(session.id)
+    cancelSessionTurn(session.id)
+    noteTurnEnded(session.id)
+    activeTurns.delete(session.id)
     store.setRunning(session.id, false)
   }
 
@@ -483,8 +490,21 @@ export async function changeConfigOption(configId: string, value: string): Promi
   const store = useStore.getState()
   const session = store.activeSession()
   if (!session) return
+
+  // 草稿还没有真实 ACP 会话：只记 pending，首发 newSession 时带上
+  if (session.isDraft) {
+    if (configId === 'model' || configId === 'reasoning_effort') {
+      store.setDraftConfig(session.id, configId, value)
+    }
+    return
+  }
+
   try {
     await window.grok.setConfigOption(session.id, configId, value)
+    // 记住用户偏好，下次新建任务默认用这个
+    if (configId === 'model' || configId === 'reasoning_effort') {
+      store.setDraftConfig(session.id, configId, value)
+    }
   } catch (err) {
     store.appendNotice(session.id, `切换 ${configId} 失败：${cleanError(err)}`, 'warn')
   }
@@ -614,6 +634,16 @@ export async function getDeletePurgeDefault(): Promise<boolean> {
 /** 写入删除确认弹窗的默认勾选状态 */
 export async function setDeletePurgeDefault(value: boolean): Promise<void> {
   await window.grok.setDeletePurgeDefault(value)
+}
+
+/** 读取屏幕右下角桌面授权浮窗模式 */
+export async function getDesktopPermToast(): Promise<DesktopPermToastMode> {
+  return window.grok.getDesktopPermToast()
+}
+
+/** 写入屏幕右下角桌面授权浮窗模式 */
+export async function setDesktopPermToast(mode: DesktopPermToastMode): Promise<void> {
+  await window.grok.setDesktopPermToast(mode)
 }
 
 /* ------------------------------------------------------------------ *

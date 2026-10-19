@@ -37,6 +37,14 @@ export const settings: typeof zh = {
       off: 'Unchecked by default',
       hint: 'Controls the "Also delete session files on disk" checkbox in the delete confirmation: when checked, the session\'s disk data is deleted too (sent to the system recycle bin first, or the in-app recycle bin when unavailable, still recoverable); when unchecked, the dialog only removes the session from the list — tick the checkbox yourself to delete the files.'
     },
+    desktopPermToast: {
+      title: 'Permission toast',
+      desc: 'Whether to show a desktop toast with Allow/Deny when another session needs approval or the window is in the background',
+      on: 'On',
+      off: 'Off',
+      hint: 'When off, rely on the in-session panel and sidebar dots only. You can turn it back on here or from the toast footer.',
+      disableFromToast: 'Turn off these toasts'
+    },
     density: {
       title: 'Tool call display density',
       desc: 'Controls how expanded tool call cards are in chats. Shares the same config with the terminal /density command (ui.tool_call_density in ~/.grok/config.toml); changes here take effect in the terminal on its next launch.',

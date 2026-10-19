@@ -169,7 +169,18 @@ export interface SessionNewResult {
  * ------------------------------------------------------------------ */
 
 export type ChatItem =
-  | { kind: 'user'; id: string; text: string; images?: ImageAttachment[]; at: number }
+  | {
+      kind: 'user'
+      id: string
+      text: string
+      images?: ImageAttachment[]
+      at: number
+      /**
+       * 客户端乐观插入（用户点发送时立刻上屏）。agent 回放/回显的
+       * `user_message_chunk` 不得拼进这类消息，也不该在 session/load 清空时丢掉。
+       */
+      local?: boolean
+    }
   | {
       kind: 'assistant'
       id: string
@@ -217,6 +228,12 @@ export interface SessionMeta {
    */
   pendingPermissionMode?: PermissionMode
   /**
+   * 草稿待定的模型 / 推理强度：首发 `session/new` 时带上。
+   * 真实会话以 `configOptions` 为准，这两个字段仅草稿使用。
+   */
+  pendingModel?: string
+  pendingEffort?: string
+  /**
    * 用户手动改的名字。展示时优先于 title；
    * 清空后回落到 grok 的自动标题，不会被自动标题覆盖。
    */
@@ -231,9 +248,11 @@ export interface SessionMeta {
    */
   updatedAt: number
   /**
-   * 从磁盘读到的真实活动时间（ms）。由主进程 `session:activity` 在启动时批量回填，
-   * 之后每次回合结束再刷新。grok 在 session/load 与启动时会全量重放历史，
-   * 重放通知会把 updatedAt 刷成「现在」；activityAt 不受影响，是排序的可信来源。
+   * 会话真实活动时间（ms）。来源：
+   *  1) 启动/加载/回合结束时主进程从磁盘 events.jsonl 的 turn_* 回填；
+   *  2) 回合进行中客户端在真实流式更新与发消息时同步刷成现在。
+   * 侧栏优先读它（`sessionActivityAt`），避免 updatedAt 被 session/load 重放污染；
+   * 也避免「只刷 updatedAt、旧 activityAt 压住正在进行的回合」。
    */
   activityAt?: number
   items: ChatItem[]
@@ -298,6 +317,13 @@ export interface DiagnosticsReport {
 
 /** 点击窗口关闭按钮时的行为：'tray'=隐藏到托盘，'quit'=直接退出 */
 export type CloseAction = 'tray' | 'quit'
+
+/**
+ * 屏幕右下角桌面授权浮窗：
+ *  - 'on'：后台或其它会话有待授权时弹出（默认）
+ *  - 'off'：不弹浮窗（只靠会话内联面板 + 侧栏色点）
+ */
+export type DesktopPermToastMode = 'on' | 'off'
 
 /**
  * 当前登录的 grok 账户信息（非敏感字段）。

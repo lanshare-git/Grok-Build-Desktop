@@ -47,6 +47,26 @@ export function resolveGrokHome(): string {
   return process.env.GROK_HOME || join(homedir(), '.grok')
 }
 
+/**
+ * 把 ACP 通知外层的 `params._meta.agentTimestampMs` 塞进 update._meta，
+ * 供渲染层给气泡打真实发送时间（否则重放只能 Date.now()）。
+ */
+function attachAgentTimestamp(
+  update: SessionUpdateEnvelope,
+  paramsMeta: unknown
+): SessionUpdateEnvelope {
+  if (!paramsMeta || typeof paramsMeta !== 'object') return update
+  const agentTimestampMs = (paramsMeta as Record<string, unknown>).agentTimestampMs
+  if (typeof agentTimestampMs !== 'number' || !Number.isFinite(agentTimestampMs) || agentTimestampMs <= 0) {
+    return update
+  }
+  const prev =
+    update._meta && typeof update._meta === 'object'
+      ? (update._meta as Record<string, unknown>)
+      : {}
+  return { ...update, _meta: { ...prev, agentTimestampMs } }
+}
+
 /** 依次尝试：环境变量 → PATH → GROK_HOME/bin → ~/.grok/bin */
 export function resolveGrokBinary(): string | null {
   const candidates: string[] = []
@@ -171,7 +191,10 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     client.on('notification', ({ method, params }) => {
       if (method === 'session/update' && params?.sessionId && params?.update) {
         const sessionId = String(params.sessionId)
-        const update = params.update as SessionUpdateEnvelope
+        // agentTimestampMs 在 params._meta 上，不在 update 里 —— 不合并的话
+        // 渲染层只能 Date.now()，重放历史时气泡时间会变成「打开会话的时刻」
+        //（用户看到「代码分析」显示 16:26，磁盘真实发送却是 15:32）。
+        const update = attachAgentTimestamp(params.update as SessionUpdateEnvelope, params._meta)
         // 正在 session/load 的会话：先缓存，等加载结束后统一下发
         const buffer = this.replayBuffers.get(sessionId)
         if (buffer) {
