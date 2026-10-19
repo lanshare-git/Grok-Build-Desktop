@@ -1,10 +1,85 @@
-import { memo } from 'react'
+import { memo, useEffect, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 
 interface Props {
   text: string
+}
+
+/** 图片加载失败：回退成可点开的 URL 块（与正文裸链接同观感） */
+function MarkdownImageFallback({ uri }: { uri: string }): JSX.Element {
+  if (!/^https?:/i.test(uri)) {
+    return <div className="msg-media-link">{uri}</div>
+  }
+  return (
+    <a
+      className="msg-media-link"
+      href={uri}
+      title={uri}
+      onClick={(e) => {
+        e.preventDefault()
+        void window.grok.openExternal(uri)
+      }}
+    >
+      {uri}
+    </a>
+  )
+}
+
+/**
+ * markdown 内图片：一律经 resolveAsset。
+ * - 本地 / file:// → grok-asset://
+ * - http(s) → 主进程拉取（内网鉴权图）
+ * - data: / grok-asset: 原样
+ * 解析失败或 onError → URL 链接块，不画空图框。
+ */
+function MarkdownImage({
+  src,
+  alt
+}: {
+  src?: string
+  alt?: string
+}): JSX.Element | null {
+  const [resolved, setResolved] = useState<string | null | undefined>(undefined)
+  const [broken, setBroken] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    setBroken(false)
+    setResolved(undefined)
+    if (!src) {
+      setResolved(null)
+      return
+    }
+    if (/^(data:|grok-asset:)/i.test(src)) {
+      setResolved(src)
+      return
+    }
+    void window.grok
+      .resolveAsset(src)
+      .then((url) => {
+        if (!cancelled) setResolved(url || null)
+      })
+      .catch(() => {
+        if (!cancelled) setResolved(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [src])
+
+  if (!src) return null
+  if (broken || resolved === null) return <MarkdownImageFallback uri={src} />
+  if (resolved === undefined) return null
+  return (
+    <img
+      className="msg-media"
+      src={resolved}
+      alt={alt ?? ''}
+      onError={() => setBroken(true)}
+    />
+  )
 }
 
 /**
@@ -36,6 +111,7 @@ function MarkdownImpl({ text }: Props): JSX.Element {
               {children}
             </a>
           ),
+          img: ({ src, alt }) => <MarkdownImage src={src} alt={alt} />,
           pre: ({ children }) => <pre className="code-block">{children}</pre>
         }}
       >

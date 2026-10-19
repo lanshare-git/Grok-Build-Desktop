@@ -224,6 +224,11 @@ export function waitForReplay(sessionId: string, timeoutMs = 60_000): Promise<vo
       settled = true
       window.clearTimeout(timer)
       unsub()
+      // 超时路径：仍卡在 reloading 时强制收尾，把 pending 用户气泡并回 items。
+      // 否则 sendPrompt 会带着「用户还在 pending」开跑，界面反着长。
+      if (useStore.getState().reloadingSessions.includes(sessionId)) {
+        useStore.getState().finishSessionReplay(sessionId)
+      }
       resolve()
     }
     const timer = window.setTimeout(done, timeoutMs)

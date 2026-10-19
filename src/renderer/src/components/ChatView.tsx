@@ -32,12 +32,15 @@ function copyText(text: string): void {
  *  或对结构化媒体缺失时、从助手文本里抽取的裸媒体链接）渲染出来。
  * ------------------------------------------------------------------ */
 
-const MEDIA_EXT = /\.(mp4|webm|mov|m4v|ogv|png|jpe?g|gif|webp|avif|bmp|svg)(\?\S*)?$/i
+const MEDIA_EXT = /\.(mp4|webm|mov|m4v|ogv|png|jpe?g|gif|webp|avif|bmp|svg)(?:\?\S*)?$/i
 
 function mediaKindFromUri(uri: string): 'video' | 'image' | null {
+  // 含 TFS ?fileName=xxx.png：扩展名可能在 query 里，不能先 strip ?
   const u = uri.toLowerCase().split('#')[0]
-  if (!MEDIA_EXT.test(u)) return null
-  return /\.(mp4|webm|mov|m4v|ogv)(\?\S*)?$/i.test(u) ? 'video' : 'image'
+  if (!MEDIA_EXT.test(u) && !/\.(mp4|webm|mov|m4v|ogv|png|jpe?g|gif|webp|avif|bmp|svg)(?:["'\s)>]|$)/i.test(u)) {
+    return null
+  }
+  return /\.(mp4|webm|mov|m4v|ogv)(?:\?|#|"|'|\s|>|$)/i.test(u) ? 'video' : 'image'
 }
 
 /**
@@ -49,7 +52,10 @@ function extractEmbeddedMedia(text: string): MediaAttachment[] {
   if (!text) return []
   const out: MediaAttachment[] = []
   const patterns = [
-    /https?:\/\/[^\s)\]]+\.(?:mp4|webm|mov|m4v|ogv|png|jpe?g|gif|webp|avif|bmp|svg)(?:\?\S*)?/gi,
+    // 路径后缀带扩展名：.../a.png?x=1
+    /https?:\/\/[^\s)"'\]]+\.(?:mp4|webm|mov|m4v|ogv|png|jpe?g|gif|webp|avif|bmp|svg)(?:\?[^\s)"'\]]*)?/gi,
+    // TFS 附件：扩展名只在 query（?fileName=xxx.png）
+    /https?:\/\/[^\s)"'\]]+[?&][^\s)"'\]]*\.(?:mp4|webm|mov|m4v|ogv|png|jpe?g|gif|webp|avif|bmp|svg)(?=[^\w.]|$)/gi,
     /(?:[a-zA-Z]:\\[^\s)\]]+|\\[\\[\w.-]+\\[^\s)\]]+)\.(?:mp4|webm|mov|m4v|ogv|png|jpe?g|gif|webp|avif|bmp|svg)/gi
   ]
   for (const re of patterns) {
@@ -65,9 +71,36 @@ function extractEmbeddedMedia(text: string): MediaAttachment[] {
   return out
 }
 
-function MediaView({ media }: { media: MediaAttachment[] }): JSX.Element {
+/**
+ * 图片/视频加载失败（内网鉴权、404 等）时的回退：
+ * 照正文里裸 URL 的 code-block 样式展示，http(s) 可点开浏览器（系统侧有登录态时能看）。
+ */
+function MediaUrlFallback({ uri }: { uri: string }): JSX.Element {
+  const isHttp = /^https?:/i.test(uri)
+  if (!isHttp) {
+    return <div className="msg-media-link">{uri}</div>
+  }
+  return (
+    <a
+      className="msg-media-link"
+      href={uri}
+      title={uri}
+      onClick={(e) => {
+        e.preventDefault()
+        void window.grok.openExternal(uri)
+      }}
+    >
+      {uri}
+    </a>
+  )
+}
+
+function MediaView({ media }: { media: MediaAttachment[] }): JSX.Element | null {
   const t = useT()
-  const [srcs, setSrcs] = useState<Record<string, string>>({})
+  /** uri → 已解析 URL；空串 = 解析失败 */
+  const [srcs, setSrcs] = useState<Record<string, string | null>>({})
+  /** 加载失败：改成 URL 链接块，不画空图框 */
+  const [failed, setFailed] = useState<Record<string, true>>({})
 
   useEffect(() => {
     let cancelled = false
@@ -75,15 +108,15 @@ function MediaView({ media }: { media: MediaAttachment[] }): JSX.Element {
       media.map(async (m) => {
         try {
           const resolved = await window.grok.resolveAsset(m.uri)
-          return [m.uri, resolved] as const
+          return [m.uri, resolved || null] as const
         } catch {
-          return [m.uri, ''] as const
+          return [m.uri, null] as const
         }
       })
     ).then((entries) => {
       if (cancelled) return
-      const map: Record<string, string> = {}
-      for (const [k, v] of entries) if (v) map[k] = v
+      const map: Record<string, string | null> = {}
+      for (const [k, v] of entries) map[k] = v
       setSrcs(map)
     })
     return () => {
@@ -91,25 +124,45 @@ function MediaView({ media }: { media: MediaAttachment[] }): JSX.Element {
     }
   }, [media])
 
-  return (
-    <div className="msg-media-wrap">
-      {media.map((m) => {
-        const src = srcs[m.uri]
-        if (!src) {
-          return (
-            <div key={m.uri} className="msg-media-loading muted">
-              {t('chat.preparingMedia')}
-            </div>
-          )
-        }
-        return m.kind === 'video' ? (
-          <video key={m.uri} className="msg-media" src={src} controls preload="metadata" />
-        ) : (
-          <img key={m.uri} className="msg-media" src={src} alt={m.name ?? t('chat.imageFallback')} />
-        )
-      })}
-    </div>
-  )
+  const nodes = media.flatMap((m) => {
+    if (failed[m.uri]) {
+      return [<MediaUrlFallback key={m.uri} uri={m.uri} />]
+    }
+    if (!(m.uri in srcs)) {
+      return [
+        <div key={m.uri} className="msg-media-loading muted">
+          {t('chat.preparingMedia')}
+        </div>
+      ]
+    }
+    const src = srcs[m.uri]
+    if (!src) {
+      return [<MediaUrlFallback key={m.uri} uri={m.uri} />]
+    }
+    return [
+      m.kind === 'video' ? (
+        <video
+          key={m.uri}
+          className="msg-media"
+          src={src}
+          controls
+          preload="metadata"
+          onError={() => setFailed((f) => ({ ...f, [m.uri]: true }))}
+        />
+      ) : (
+        <img
+          key={m.uri}
+          className="msg-media"
+          src={src}
+          alt={m.name ?? t('chat.imageFallback')}
+          onError={() => setFailed((f) => ({ ...f, [m.uri]: true }))}
+        />
+      )
+    ]
+  })
+  if (nodes.length === 0) return null
+
+  return <div className="msg-media-wrap">{nodes}</div>
 }
 
 /* ------------------------------------------------------------------ *
@@ -242,8 +295,19 @@ export default function ChatView(): JSX.Element {
   const sessionItems = session?.items ?? []
   const rawItems = useMemo(() => {
     if (pendingUser.length === 0) return sessionItems
-    const ids = new Set(pendingUser.map((p) => p.id))
-    return [...sessionItems.filter((it) => !ids.has(it.id)), ...pendingUser]
+    // id 去重不够：乐观气泡与重放/回显气泡 id 不同。
+    // 若 items 里已有同正文 user，丢掉 pending（否则会钉到最底，像反着加载）。
+    const sameText = (a: string, b: string): boolean => a.includes(b) || b.includes(a)
+    const visiblePending = pendingUser.filter(
+      (p) =>
+        !sessionItems.some(
+          (it) =>
+            it.id === p.id || (it.kind === 'user' && sameText(it.text, p.text))
+        )
+    )
+    if (visiblePending.length === 0) return sessionItems
+    const pendingIds = new Set(visiblePending.map((p) => p.id))
+    return [...sessionItems.filter((it) => !pendingIds.has(it.id)), ...visiblePending]
   }, [sessionItems, pendingUser])
   // 「紧凑 + 分组 / 最紧凑」档：把**连续的同种**工具调用折成一张汇总卡（grok 1.0.52 同义行为）。
   // 必须在渲染前做，且用 useMemo 缓存 —— 否则每次 keystroke 都会重扫几百条 items。

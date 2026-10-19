@@ -4,6 +4,7 @@ import {
   cleanError,
   connectAgent,
   newChatSession,
+  onAgentTurnCompleted,
   refreshAccount,
   refreshDiagnostics,
   refreshEnvInfo,
@@ -128,6 +129,8 @@ export default function App(): JSX.Element {
         }
       }),
       window.grok.onStream((e) => enqueueStreamEvent(e)),
+      // agent 回合终态：不等 session/prompt RPC，立刻收尾「正在工作」
+      window.grok.onTurnComplete((e) => onAgentTurnCompleted(e.sessionId)),
       window.grok.onPermission((e) => {
         // 授权提醒改走主进程桌面浮窗（可直接点按钮）；当前会话前台只靠内联面板
         useStore.getState().setPermission(e)

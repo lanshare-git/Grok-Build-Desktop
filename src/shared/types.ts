@@ -776,6 +776,18 @@ export interface AcpStreamEvent {
   update: SessionUpdateEnvelope
 }
 
+/**
+ * agent 回合终态通知（`_x.ai/session/update` → turn_completed，
+ * 或 `x.ai/session/prompt_complete`）。
+ * 与 `session/prompt` 的 JSON-RPC 返回是一对信号；桌面端此前只等后者，
+ * 后者若迟迟不到 UI 就会一直「正在工作」——即使用户可见内容已写完。
+ */
+export interface TurnCompleteEvent {
+  sessionId: string
+  promptId?: string
+  stopReason?: string
+}
+
 export interface ConnectionEvent {
   state: ConnectionState
   message?: string

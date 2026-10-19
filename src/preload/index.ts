@@ -13,6 +13,7 @@ import type {
   NewSessionOptions,
   PermissionRequestEvent,
   ToolCallDensity,
+  TurnCompleteEvent,
   UserQuestionAnswers,
   UserQuestionEvent
 } from '../shared/types'
@@ -77,6 +78,8 @@ const api: GrokDesktopApi = {
   onLog: (cb: (line: string) => void) => subscribe(CH.pushLog, cb),
   onLoginProgress: (cb: (line: string) => void) => subscribe(CH.pushLoginProgress, cb),
   onMeta: (cb: (meta: AgentMetaEvent) => void) => subscribe(CH.pushMeta, cb),
+  onTurnComplete: (cb: (event: TurnCompleteEvent) => void) =>
+    subscribe(CH.pushTurnComplete, cb),
 
   mcpList: () => ipcRenderer.invoke(CH.mcpList),
   mcpAdd: (server: McpServerInput) => ipcRenderer.invoke(CH.mcpAdd, server),

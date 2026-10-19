@@ -24,6 +24,7 @@ import type {
   PermissionRequestEvent,
   SessionNewResult,
   SessionUpdateEnvelope,
+  TurnCompleteEvent,
   UserQuestionAnswers,
   UserQuestionEvent,
   UserQuestion
@@ -41,6 +42,11 @@ export interface AgentServiceEvents {
    * 不接住就等于终端里的新功能在桌面端完全不可见。
    */
   meta: [{ commands: AvailableCommand[]; announcements: GrokAnnouncement[] }]
+  /**
+   * 回合终态：`_x.ai/session/update` 的 turn_completed，或 `x.ai/session/prompt_complete`。
+   * 与 session/prompt 的 JSON-RPC 返回成对；只等后者会在 prompt 迟滞时卡在「正在工作」。
+   */
+  turnComplete: [TurnCompleteEvent]
 }
 
 export function resolveGrokHome(): string {
@@ -202,6 +208,37 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
           return
         }
         this.emit('stream', { sessionId, update })
+        return
+      }
+      // 回合终态（持久化轨）：与 session/prompt RPC 返回成对。此前只 log、不转发，
+      // 导致「总结写完、磁盘已有 turn_completed，UI 仍正在工作」。
+      if (method === '_x.ai/session/update' && params?.sessionId && params?.update) {
+        const update = params.update as {
+          sessionUpdate?: string
+          prompt_id?: string
+          stop_reason?: string
+        }
+        if (update.sessionUpdate === 'turn_completed') {
+          this.emit('turnComplete', {
+            sessionId: String(params.sessionId),
+            promptId: update.prompt_id,
+            stopReason: update.stop_reason
+          })
+        }
+        return
+      }
+      // 回合终态（瞬时轨）：fire-and-forget，与 turn_completed 字段同源
+      if (method === 'x.ai/session/prompt_complete' && params?.sessionId) {
+        const p = params as {
+          sessionId: string
+          promptId?: string
+          stopReason?: string
+        }
+        this.emit('turnComplete', {
+          sessionId: String(p.sessionId),
+          promptId: p.promptId,
+          stopReason: p.stopReason
+        })
         return
       }
       // grok 的新功能/版本公告（终端里表现为启动横幅），桌面端转发给渲染层展示

@@ -4,6 +4,7 @@ import type { Locale } from './i18n/types'
 import type {
   AcpStreamEvent,
   AgentMetaEvent,
+  TurnCompleteEvent,
   BillingQuota,
   CloseAction,
   ConnectionEvent,
@@ -323,6 +324,11 @@ export interface GrokDesktopApi {
   onCloseActionRequest(cb: () => void): () => void
   /** agent 上报的内置命令与公告 */
   onMeta(cb: (meta: AgentMetaEvent) => void): () => void
+  /**
+   * agent 回合终态（turn_completed）。比 session/prompt RPC 返回更早/更稳，
+   * 用来立刻清掉「Agent 正在工作…」；prompt 的 finally 仍会再跑一遍（幂等）。
+   */
+  onTurnComplete(cb: (event: TurnCompleteEvent) => void): () => void
   /** 系统通知被点击：切到对应会话处理待授权/提问 */
   onFocusSession(cb: (event: { sessionId: string }) => void): () => void
   /** 授权已在别处处理（桌面浮窗或本窗口）：清掉对应 permission 卡 */

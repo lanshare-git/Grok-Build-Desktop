@@ -32,7 +32,10 @@ interface OpenToast {
 }
 
 const MARGIN = 12
-const WIDTH = 420
+/** 卡片内容宽；窗外再留 SHADOW_PAD 给投影，避免被透明窗裁成「贴平面」 */
+const CARD_WIDTH = 420
+const SHADOW_PAD = 14
+const WIDTH = CARD_WIDTH + SHADOW_PAD * 2
 const openToasts = new Map<number, OpenToast>()
 
 function escapeHtml(s: string): string {
@@ -83,10 +86,11 @@ function buildHtml(payload: DesktopPermToast): string {
 <style>
   :root {
     color-scheme: light;
-    --bg: #fff;
+    /* 暖色抬起面：相对主窗纯白 #fff / 浅灰底，一眼能分出「浮层」 */
+    --bg: #fffbf5;
     --text: #1a1d23;
     --muted: #6b7280;
-    --line: #e5e7eb;
+    --line: #ead9c0;
     --warn: #b45309;
     --warn-soft: #fdf4e7;
     --ink: #1f2937;
@@ -100,13 +104,23 @@ function buildHtml(payload: DesktopPermToast): string {
     overflow: hidden;
     user-select: none;
   }
+  body {
+    padding: ${SHADOW_PAD}px;
+  }
   .card {
     margin: 0;
     padding: 12px 12px 10px;
+    width: ${CARD_WIDTH}px;
     background: var(--bg);
     border: 1px solid var(--line);
+    border-left: 3px solid var(--warn);
     border-radius: 12px;
-    box-shadow: 0 10px 28px rgba(0,0,0,.18);
+    /* 多层投影：近处轮廓 + 中距抬起 + 远处落影，避免白底贴白底 */
+    box-shadow:
+      0 0 0 1px rgba(180, 83, 9, 0.06),
+      0 2px 4px rgba(16, 24, 40, 0.06),
+      0 12px 28px rgba(16, 24, 40, 0.18),
+      0 28px 56px rgba(16, 24, 40, 0.14);
   }
   .head {
     display: flex;
@@ -181,7 +195,7 @@ function buildHtml(payload: DesktopPermToast): string {
   .btn.primary:hover { filter: brightness(1.08); }
   .btn.ghost {
     background: #fff;
-    border-color: var(--line);
+    border-color: #e5e7eb;
     color: var(--text);
   }
   .btn.ghost:hover { background: #f3f4f6; }
@@ -268,12 +282,12 @@ function placeWindow(win: BrowserWindow, index: number): void {
 async function fitAndPlace(win: BrowserWindow, stackIndex: number): Promise<void> {
   if (win.isDestroyed()) return
   try {
+    // 量 body 总高（含 SHADOW_PAD），阴影才不会被透明窗裁掉
     const height = await win.webContents.executeJavaScript(
-      `Math.ceil(document.getElementById('card').getBoundingClientRect().height)`
+      `Math.ceil(document.body.getBoundingClientRect().height)`
     )
     if (typeof height === 'number' && height > 0 && !win.isDestroyed()) {
-      // +2：避免亚像素裁切底边阴影
-      win.setContentSize(WIDTH, Math.ceil(height) + 2)
+      win.setContentSize(WIDTH, Math.ceil(height))
     }
   } catch {
     /* 测量失败就用初始高度 */

@@ -9,6 +9,22 @@ import {
   noteTurnEnded,
   noteTurnStarted
 } from './turn-idle'
+
+/**
+ * agent 已宣告回合结束（turn_completed / prompt_complete），但 session/prompt
+ * 的 JSON-RPC 可能还挂着（常见：事后 memory dream）。立刻收尾 UI，避免
+ * 「总结写完了还一直正在工作」。不碰 activeTurns —— prompt 的 finally 负责计数。
+ */
+export function onAgentTurnCompleted(sessionId: string): void {
+  const s = useStore.getState()
+  if (!s.running.includes(sessionId)) return
+  // 重放历史里的 turn_completed 不能收尾当前回合
+  if (s.reloadingSessions.includes(sessionId)) return
+  s.finalizeSession(sessionId)
+  noteTurnEnded(sessionId)
+  s.setRunning(sessionId, false)
+  s.markStuckTools(sessionId)
+}
 import { isLockedChat, sameDir } from './utils'
 import type {
   CloseAction,
@@ -414,6 +430,9 @@ export async function sendPrompt(text: string, images?: ImageAttachment[]): Prom
     if (useStore.getState().reloadingSessions.includes(activeId)) {
       await waitForReplay(activeId)
     }
+    // 兜底：重放超时 / agent 重启清掉 reloading 却漏并 pending 时，
+    // 若此时直接 prompt，Agent 流进 items、用户气泡仍钉在 pending 底 → 「反着加载」。
+    useStore.getState().flushPendingUserMessages(activeId)
     await window.grok.prompt(activeId, text, images)
   } catch (err) {
     useStore

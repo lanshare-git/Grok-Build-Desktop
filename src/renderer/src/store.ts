@@ -236,6 +236,46 @@ function isLocalUser(item: ChatItem | undefined): item is Extract<ChatItem, { ki
   return !!item && item.kind === 'user' && item.local === true
 }
 
+/** pending 乐观气泡与 items 里已有 user 是否同一条（id 不同，只能比正文） */
+function isSameUserText(a: string, b: string): boolean {
+  return a.includes(b) || b.includes(a)
+}
+
+/**
+ * 把 pendingUserMessages 并入 items 末尾（按正文去重），并清掉 pending。
+ * 供 finishSessionReplay / 发 prompt 前兜底 / clearLoaded 异常路径共用。
+ */
+function mergePendingUserMessages(
+  sessions: SessionMeta[],
+  pendingUserMessages: Record<string, Extract<ChatItem, { kind: 'user' }>[]>,
+  sessionId: string
+): {
+  sessions: SessionMeta[]
+  pendingUserMessages: Record<string, Extract<ChatItem, { kind: 'user' }>[]>
+} {
+  const pending = pendingUserMessages[sessionId] ?? []
+  const nextPending = { ...pendingUserMessages }
+  delete nextPending[sessionId]
+  if (pending.length === 0) {
+    return { sessions, pendingUserMessages: nextPending }
+  }
+  return {
+    pendingUserMessages: nextPending,
+    sessions: sessions.map((x) => {
+      if (x.id !== sessionId) return x
+      const ids = new Set(x.items.map((it) => it.id))
+      const userTexts = x.items
+        .filter((it): it is Extract<ChatItem, { kind: 'user' }> => it.kind === 'user')
+        .map((it) => it.text)
+      const extra = pending.filter((p) => {
+        if (ids.has(p.id)) return false
+        return !userTexts.some((t) => isSameUserText(t, p.text))
+      })
+      return extra.length === 0 ? x : { ...x, items: [...x.items, ...extra] }
+    })
+  }
+}
+
 /** 优先用 agent 下发的真实事件时间；没有才退回现在（现场发送的乐观气泡仍走 Date.now()） */
 function eventAt(update: SessionUpdateEnvelope): number {
   const meta = update._meta
@@ -289,9 +329,14 @@ function guessMediaKind(uri?: string, mimeType?: string): 'video' | 'image' | nu
   if (mt.startsWith('video/')) return 'video'
   if (mt.startsWith('image/')) return 'image'
   if (!uri) return null
-  const u = uri.toLowerCase().split('?')[0]
-  if (/\.(mp4|webm|mov|m4v|ogv)$/.test(u)) return 'video'
-  if (/\.(png|jpe?g|gif|webp|avif|bmp|svg)$/.test(u)) return 'image'
+  // 路径后缀或 query（TFS ?fileName=xxx.png）里带扩展名都算
+  const u = uri.toLowerCase().split('#')[0]
+  if (/\.(mp4|webm|mov|m4v|ogv)(?:\?|#|$)/i.test(u) || /[?&][^#]*\.(mp4|webm|mov|m4v|ogv)(?:&|#|$)/i.test(u)) {
+    return 'video'
+  }
+  if (/\.(png|jpe?g|gif|webp|avif|bmp|svg)(?:\?|#|$)/i.test(u) || /[?&][^#]*\.(png|jpe?g|gif|webp|avif|bmp|svg)(?:&|#|$)/i.test(u)) {
+    return 'image'
+  }
   return null
 }
 
@@ -683,6 +728,12 @@ interface AppState {
    * 只加载了一部分」的成因，留着一定会被误用。
    */
   finishSessionReplay(sessionId: string): void
+  /**
+   * 把仍挂着的 pending 用户气泡强制并入 items（发 prompt 前兜底）。
+   * 重放超时 / agent 重启清掉 reloading 却漏 flush 时，否则 Agent 流会写进 items，
+   * 用户气泡仍被 ChatView 钉在最底 —— 看起来像「反着加载」。
+   */
+  flushPendingUserMessages(sessionId: string): void
   clearLoadedSessions(): void
   /**
    * 卸载单个会话的本地状态（配合 ACP session/close）。
@@ -1475,26 +1526,11 @@ advanceReplayProgress: (sessionId, applied) =>
         const now = Date.now()
         const progress = { ...s.replayProgress }
         delete progress[sessionId]
-        const pending = s.pendingUserMessages[sessionId] ?? []
-        const pendingUserMessages = { ...s.pendingUserMessages }
-        delete pendingUserMessages[sessionId]
-        let sessions = markStuckToolsAfterReplay(finalizeReplay(s.sessions, sessionId), sessionId)
-        if (pending.length > 0) {
-          sessions = sessions.map((x) => {
-            if (x.id !== sessionId) return x
-            const ids = new Set(x.items.map((it) => it.id))
-            const userTexts = x.items
-              .filter((it): it is Extract<ChatItem, { kind: 'user' }> => it.kind === 'user')
-              .map((it) => it.text)
-            // id 去重不够：local 乐观气泡与重放出来的气泡 id 不同，
-            // 必须按正文判断「重放里已经有了」—— 否则会在末尾再挂一条。
-            const extra = pending.filter((p) => {
-              if (ids.has(p.id)) return false
-              return !userTexts.some((t) => t.includes(p.text) || p.text.includes(t))
-            })
-            return extra.length === 0 ? x : { ...x, items: [...x.items, ...extra] }
-          })
-        }
+        const merged = mergePendingUserMessages(s.sessions, s.pendingUserMessages, sessionId)
+        const sessions = markStuckToolsAfterReplay(
+          finalizeReplay(merged.sessions, sessionId),
+          sessionId
+        )
         return {
           // ⚠️ 必须同时 finalize：重放走的是 reduceUpdate，最后一条 assistant/thinking
           // 会停在 `streaming: true`（没人再调 finalizeSession —— 那个只在 sendPrompt 里调）。
@@ -1504,44 +1540,70 @@ advanceReplayProgress: (sessionId, applied) =>
           //（那是上一个 agent 进程的事，新进程不会为它补发终态）—— 不标就是永远转圈。
           // 正是「重启客户端后某张卡一直『执行中』」的成因（2026-10-15）。
           sessions,
-          pendingUserMessages,
-   suppressActivityUntil: { ...s.suppressActivityUntil, [sessionId]: now + 1200 },
-replayCapUntil: { ...s.replayCapUntil, [sessionId]: now + REPLAY_SLIDING_CAP_MS },
-      reloadingSessions: s.reloadingSessions.filter((id) => id !== sessionId),
-   replayProgress: progress
-     }
+          pendingUserMessages: merged.pendingUserMessages,
+          suppressActivityUntil: { ...s.suppressActivityUntil, [sessionId]: now + 1200 },
+          replayCapUntil: { ...s.replayCapUntil, [sessionId]: now + REPLAY_SLIDING_CAP_MS },
+          reloadingSessions: s.reloadingSessions.filter((id) => id !== sessionId),
+          replayProgress: progress
+        }
       }),
 
-clearLoadedSessions: () =>
-        set({
-          loadedSessions: [],
-          suppressActivityUntil: {},
-          replayCapUntil: {},
-          reloadingSessions: [],
-    replayProgress: {}
+      flushPendingUserMessages: (sessionId) =>
+        set((s) => {
+          if (!(sessionId in s.pendingUserMessages)) return {}
+          const merged = mergePendingUserMessages(s.sessions, s.pendingUserMessages, sessionId)
+          return {
+            sessions: merged.sessions,
+            pendingUserMessages: merged.pendingUserMessages
+          }
+        }),
+
+      clearLoadedSessions: () =>
+        set((s) => {
+          // agent 重启会走这里：reloading 被清掉时必须把 pending 并回 items，
+          // 否则 waitForReplay 立刻返回 → prompt 开跑 → 用户气泡仍钉在底部。
+          let sessions = s.sessions
+          let pendingUserMessages = s.pendingUserMessages
+          for (const id of Object.keys(pendingUserMessages)) {
+            const merged = mergePendingUserMessages(sessions, pendingUserMessages, id)
+            sessions = merged.sessions
+            pendingUserMessages = merged.pendingUserMessages
+          }
+          return {
+            sessions,
+            pendingUserMessages,
+            loadedSessions: [],
+            suppressActivityUntil: {},
+            replayCapUntil: {},
+            reloadingSessions: [],
+            replayProgress: {}
+          }
         }),
 
       /**
        * 卸载单个会话（ACP session/close 成功后的本地收尾）。
        * 与 clearLoadedSessions 同样要清掉四份派生状态，否则该会话会永远显示
        * 「正在加载历史」、进度条卡住。**会话本身与 items 保留** —— 只是释放了
-      * agent 进程里的副本，下次打开会重新 session/load。
+       * agent 进程里的副本，下次打开会重新 session/load。
        */
       forgetLoadedSession: (sessionId) =>
         set((s) => {
           const progress = { ...s.replayProgress }
           delete progress[sessionId]
-       const suppress = { ...s.suppressActivityUntil }
-      delete suppress[sessionId]
+          const suppress = { ...s.suppressActivityUntil }
+          delete suppress[sessionId]
           const cap = { ...s.replayCapUntil }
-        delete cap[sessionId]
-    return {
+          delete cap[sessionId]
+          const merged = mergePendingUserMessages(s.sessions, s.pendingUserMessages, sessionId)
+          return {
+            sessions: merged.sessions,
+            pendingUserMessages: merged.pendingUserMessages,
             loadedSessions: s.loadedSessions.filter((id) => id !== sessionId),
             reloadingSessions: s.reloadingSessions.filter((id) => id !== sessionId),
-   replayProgress: progress,
-      suppressActivityUntil: suppress,
-    replayCapUntil: cap
-       }
+            replayProgress: progress,
+            suppressActivityUntil: suppress,
+            replayCapUntil: cap
+          }
         }),
 
       refreshActivity: async (sessionIds) => {

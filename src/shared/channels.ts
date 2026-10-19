@@ -120,6 +120,8 @@ export const CH = {
 
   /* main -> renderer（send，单向推送） */
   pushStream: 'push:stream',
+  /** agent 回合终态（turn_completed / prompt_complete），用于立刻收尾 running */
+  pushTurnComplete: 'push:turn-complete',
   /** 主进程请求渲染层弹窗询问「关闭时如何」（配置为空时触发） */
   closeActionRequest: 'close:action-request',
   pushState: 'push:state',

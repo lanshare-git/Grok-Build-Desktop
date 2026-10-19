@@ -7,7 +7,7 @@ import { join } from 'node:path'
 
 import { CH } from '../shared/channels'
 import { AgentService, resolveGrokBinary, resolveGrokHome } from './acp/service'
-import { resolveAssetUri } from './assets'
+import { resolveAssetUriAsync } from './assets'
 import { readConfig, writeConfig } from './config'
 import { runDiagnostics } from './diagnostics'
 import { detectProxy } from './proxy'
@@ -86,6 +86,7 @@ function broadcast(channel: string, payload: unknown): void {
 export function registerIpc(service: AgentService): void {
   /* ---------- AgentService 事件 -> 渲染进程 ---------- */
   service.on('stream', (event) => broadcast(CH.pushStream, event))
+  service.on('turnComplete', (event) => broadcast(CH.pushTurnComplete, event))
   service.on('state', (event) => {
     console.log('[agent-state]', event.state, event.message ?? '')
     broadcast(CH.pushState, event)
@@ -350,8 +351,8 @@ export function registerIpc(service: AgentService): void {
     }
   )
 
-  // 媒体资源地址归一化：file:// / 本地绝对路径 -> grok-asset://；http(s)/data: 原样返回
-  ipcMain.handle(CH.assetResolve, (_e, rawUri: string): string => resolveAssetUri(rawUri))
+  // 媒体资源地址归一化：本地 → grok-asset://；http(s) 主进程拉取后缓存再转 grok-asset（内网鉴权图）
+  ipcMain.handle(CH.assetResolve, (_e, rawUri: string) => resolveAssetUriAsync(rawUri))
 
   /* ---------- MCP 服务器管理 ---------- */
   // 写操作后重启 agent，让新的 MCP 配置在长驻进程里生效（与代理改动的语义一致）。

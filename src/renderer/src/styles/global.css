@@ -2794,6 +2794,30 @@ pre {
   border: 1px dashed var(--border);
   border-radius: var(--radius-sm);
 }
+/* 图片拉失败回退：观感贴近正文里的裸 URL code-block，可点开浏览器 */
+.msg-media-link {
+  display: block;
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 12.3px;
+  line-height: 1.6;
+  color: var(--text);
+  word-break: break-all;
+  text-decoration: none;
+  cursor: default;
+}
+a.msg-media-link {
+  cursor: pointer;
+  color: var(--text);
+}
+a.msg-media-link:hover {
+  border-color: var(--border-strong);
+  color: var(--accent, #3b82f6);
+}
 
 /* ---------- 命令补全下拉 ---------- */
 
