@@ -200,8 +200,11 @@ function finalizeReplay(sessions: SessionMeta[], sessionId: string): SessionMeta
  * 工具卡「卡住」时的兜底文案。两种来源说法不同，且都刻意**不写「失败」**：
  * 客户端确实没收到结果，写「失败」等于替 agent 编了一个它从没说过的结论。
  */
-const STUCK_REASON_TURN = '回合已结束，客户端未收到该工具的返回结果（可能是被中断或 agent 侧超时）。'
-const STUCK_REASON_REPLAY = '这是上一次进程里未完成的调用，重启后不会再有结果。'
+/** 中断说明按当前语言生成（ToolCallCard 直接渲染 failReason） */
+const stuckReasonTurn = (): string =>
+  tShared(useStore.getState().locale, 'tool.interruptTurn')
+const stuckReasonReplay = (): string =>
+  tShared(useStore.getState().locale, 'tool.interruptReplay')
 
 /**
  * 把「非终态」的工具卡标成 `interrupted` —— 纯本地状态，不依赖 agent 下发。
@@ -227,7 +230,7 @@ function markStuckToolsAfterReplay(sessions: SessionMeta[], sessionId: string): 
   if (useStore.getState().running.includes(sessionId)) return sessions
   const index = sessions.findIndex((x) => x.id === sessionId)
   if (index === -1) return sessions
-  const items = markStuckToolsIn(sessions[index].items, STUCK_REASON_REPLAY)
+  const items = markStuckToolsIn(sessions[index].items, stuckReasonReplay())
   if (items === sessions[index].items) return sessions
   const next = [...sessions]
   next[index] = { ...sessions[index], items }
@@ -1800,7 +1803,7 @@ advanceReplayProgress: (sessionId, applied) =>
           })
         })),
 
-      markStuckTools: (sessionId, reason = STUCK_REASON_TURN, onlyToolCallIds) => {
+      markStuckTools: (sessionId, reason = stuckReasonTurn(), onlyToolCallIds) => {
         // 先读一次判空：没有卡住的卡就**完全不 set()**（persist 每次 set 都要全量序列化）
         const session = get().sessions.find((x) => x.id === sessionId)
         if (!session) return 0

@@ -1,6 +1,7 @@
 /** 界面动作集合 —— 统一处理 IPC 调用、错误提示与状态流转 */
 
 import { t as tShared } from '@shared/i18n'
+import type { Locale } from '@shared/i18n'
 import { finishReplayIfIdle, waitForReplay } from './stream-queue'
 import { useStore } from './store'
 import {
@@ -35,6 +36,9 @@ import type {
   PermissionMode,
   ToolCallDensity
 } from '@shared/types'
+
+/** 非 hook 上下文（actions/工具函数）取当前语言 */
+const locale = (): Locale => useStore.getState().locale
 
 /** Electron IPC 抛出的错误带有前缀，剥掉以便展示 */
 export function cleanError(err: unknown): string {
@@ -76,7 +80,7 @@ export async function purgeSessionData(session: {
       return { ok: true, method: res.method, quarantinePath: res.quarantinePath, staleShell: res.staleShell }
     }
     if (res.error === 'not-found') return { ok: true }
-    return { ok: false, reason: res.error ?? '未知错误' }
+    return { ok: false, reason: res.error ?? tShared(locale(), 'sessionTools.unknownError') }
   } catch (err) {
     return { ok: false, reason: cleanError(err) }
   }
@@ -103,10 +107,11 @@ export async function moveSessionToWorkspace(
   toCwd: string
 ): Promise<{ ok: boolean; message: string; dir?: string }> {
   const store = useStore.getState()
-  if (!toCwd) return { ok: false, message: '目标工作目录为空' }
-  if (sameDir(toCwd, session.cwd)) return { ok: false, message: '已经在目标工作目录下' }
+  if (!toCwd) return { ok: false, message: tShared(locale(), 'mainErrors.sessionMove.missingCwd') }
+  if (sameDir(toCwd, session.cwd))
+    return { ok: false, message: tShared(locale(), 'mainErrors.sessionMove.sameDir') }
   if (store.running.includes(session.id)) {
-    return { ok: false, message: '该会话正在生成中，等这一轮结束再移动' }
+    return { ok: false, message: tShared(locale(), 'sidebar.flash.sessionRunning') }
   }
 
   if (!session.isDraft) {
@@ -127,7 +132,7 @@ export async function moveSessionToWorkspace(
         toCwd
       })
       if (!res.ok && res.reason !== 'same-dir') {
-        return { ok: false, message: res.detail ?? '搬移失败' }
+        return { ok: false, message: res.detail ?? tShared(locale(), 'mainErrors.sessionMove.failedSimple') }
       }
     } catch (err) {
       return { ok: false, message: cleanError(err) }
@@ -143,7 +148,7 @@ export async function moveSessionToWorkspace(
   if (!session.isDraft && s.activeId === session.id) {
     await resumeSession(session.id, toCwd)
   }
-  return { ok: true, message: '已移动到新工作目录', dir: toCwd }
+  return { ok: true, message: tShared(locale(), 'mainErrors.sessionMove.done'), dir: toCwd }
 }
 
 /**
@@ -163,7 +168,7 @@ export async function applyPermissionModeToSession(sessionId: string): Promise<v
   try {
     await window.grok.setPermissionMode(sessionId, mode)
   } catch (err) {
-    store.appendNotice(sessionId, `切换权限模式失败：${cleanError(err)}`, 'error')
+    store.appendNotice(sessionId, tShared(locale(), 'mainErrors.notices.permSwitchFailed', { message: cleanError(err) }), 'error')
   }
 }
 
@@ -220,7 +225,7 @@ export async function switchWorkspace(dir?: string): Promise<void> {
   useStore.getState().setCwd(target)
 
   if (current && sameDir(current.cwd, target)) {
-    store.appendNotice(current.id, `当前会话已经以 ${target} 为工作目录。`, 'info')
+    store.appendNotice(current.id, tShared(locale(), 'mainErrors.notices.alreadyAtCwd', { dir: target }), 'info')
     return
   }
 
@@ -241,7 +246,7 @@ export async function switchWorkspace(dir?: string): Promise<void> {
   if (emptyPrevId) after.deleteSession(emptyPrevId)
 
   const active = useStore.getState().activeSession()
-  if (active) useStore.getState().appendNotice(active.id, `已切换到工作目录 ${target}。`, 'info')
+  if (active) useStore.getState().appendNotice(active.id, tShared(locale(), 'mainErrors.notices.switchedCwd', { dir: target }), 'info')
 }
 
 /**
@@ -391,7 +396,7 @@ async function resumeSessionInner(sessionId: string, cwd: string): Promise<void>
       } catch (retryErr) {
         useStore.getState().appendNotice(
           sessionId,
-          `恢复会话失败：${cleanError(retryErr)}`,
+          tShared(locale(), 'mainErrors.notices.resumeFailed', { message: cleanError(retryErr) }),
           'error'
         )
         useStore.getState().finishSessionReplay(sessionId)
@@ -401,8 +406,8 @@ async function resumeSessionInner(sessionId: string, cwd: string): Promise<void>
     useStore.getState().appendNotice(
       sessionId,
       missingOnDisk
-        ? '会话的磁盘数据已不存在（多半已被删除或移动过），无法恢复。可在侧栏删除这条记录，避免反复点开报错。'
-        : `恢复会话失败：${raw}`,
+        ? tShared(locale(), 'mainErrors.notices.resumeGone')
+        : tShared(locale(), 'mainErrors.notices.resumeFailed', { message: raw }),
       'error'
     )
     // 失败路径必须无条件结束，否则「正在加载」会一直转
@@ -464,7 +469,7 @@ export async function sendPrompt(text: string, images?: ImageAttachment[]): Prom
       store.materializeDraft(session.id, { id: result.sessionId, configOptions: result.configOptions })
       store.rememberConfigCatalog(result.configOptions)
     } catch (err) {
-      useStore.getState().appendNotice(session.id, `创建会话失败：${cleanError(err)}`, 'error')
+      useStore.getState().appendNotice(session.id, tShared(locale(), 'mainErrors.notices.createFailed', { message: cleanError(err) }), 'error')
       const s = useStore.getState()
       s.finalizeSession(session.id)
       s.setRunning(session.id, false)
@@ -518,7 +523,7 @@ export async function sendPrompt(text: string, images?: ImageAttachment[]): Prom
   } catch (err) {
     useStore
       .getState()
-      .appendNotice(activeId, `请求失败：${cleanError(err)}`, 'error')
+      .appendNotice(activeId, tShared(locale(), 'mainErrors.notices.requestFailed', { message: cleanError(err) }), 'error')
   } finally {
     const s = useStore.getState()
     // ⚠️ 必须用本轮 sessionId（activeId），不能用当前前台 activeId：
@@ -605,7 +610,7 @@ export async function changeConfigOption(configId: string, value: string): Promi
       store.setDraftConfig(session.id, configId, value)
     }
   } catch (err) {
-    store.appendNotice(session.id, `切换 ${configId} 失败：${cleanError(err)}`, 'warn')
+    store.appendNotice(session.id, tShared(locale(), 'mainErrors.notices.configSwitchFailed', { id: configId, message: cleanError(err) }), 'warn')
   }
 }
 

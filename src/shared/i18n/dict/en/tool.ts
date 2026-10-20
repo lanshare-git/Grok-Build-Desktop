@@ -22,5 +22,8 @@ export const tool: typeof zh = {
     involvedFiles: 'Files involved',
     input: 'Input',
     output: 'Output'
-  }
+  },
+  /** Client-side fallback interruption reasons (written by markStuckTools, rendered verbatim by ToolCallCard) */
+  interruptTurn: 'The turn has ended without a tool result reaching the client (it may have been interrupted or timed out on the agent side).',
+  interruptReplay: 'This call was left unfinished by the previous process; there will be no result after the restart.'
 }

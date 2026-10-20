@@ -15,7 +15,22 @@ export const mainErrors = {
     notFound: '磁盘上找不到该会话的目录（草稿会话，或已被清理）',
     outOfBounds: '目标路径越界，已拒绝搬移',
     collision: (vars: { path: string }) => `目标目录下已存在同名会话目录，未做覆盖：${vars.path}`,
-    failed: (vars: { message: string }) => `搬移失败（该会话可能正被 grok 占用）：${vars.message}`
+    failed: (vars: { message: string }) => `搬移失败（该会话可能正被 grok 占用）：${vars.message}`,
+    failedSimple: '搬移失败',
+    done: '已移动到新工作目录'
+  },
+  /** 渲染层 actions.ts 的 appendNotice 用户可见提示 */
+  notices: {
+    permSwitchFailed: (vars: { message: string }) => `切换权限模式失败：${vars.message}`,
+    alreadyAtCwd: (vars: { dir: string }) => `当前会话已经以 ${vars.dir} 为工作目录。`,
+    switchedCwd: (vars: { dir: string }) => `已切换到工作目录 ${vars.dir}。`,
+    resumeFailed: (vars: { message: string }) => `恢复会话失败：${vars.message}`,
+    resumeGone:
+      '会话的磁盘数据已不存在（多半已被删除或移动过），无法恢复。可在侧栏删除这条记录，避免反复点开报错。',
+    createFailed: (vars: { message: string }) => `创建会话失败：${vars.message}`,
+    requestFailed: (vars: { message: string }) => `请求失败：${vars.message}`,
+    configSwitchFailed: (vars: { id: string; message: string }) =>
+      `切换 ${vars.id} 失败：${vars.message}`
   },
   grokCli: {
     binaryMissing: '未找到 grok 可执行文件。请确认已安装 Grok Build，或设置环境变量 GROK_BIN。',
@@ -45,5 +60,19 @@ export const mainErrors = {
   },
   longShot: {
     dialogTitle: '保存会话长截屏'
+  },
+  /** acp/service.ts 冒泡到连接状态与 prompt 错误的用户可见串 */
+  service: {
+    binaryMissingShort: '未找到 grok 可执行文件',
+    starting: (vars: { binary: string }) => `正在启动 ${vars.binary}`,
+    exited: (vars: { code: string }) => `agent 进程已退出（code=${vars.code}）`,
+    ready: 'agent 已就绪',
+    stopped: '已停止',
+    emptyContent: '消息内容为空'
+  },
+  /** billing.ts 额度读取失败原因（AccountMenu 额度行显示） */
+  billing: {
+    notLoggedIn: '未登录',
+    unavailable: '额度信息不可用'
   }
 }

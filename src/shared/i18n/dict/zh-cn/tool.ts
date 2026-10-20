@@ -21,5 +21,8 @@ export const tool = {
     involvedFiles: '涉及文件',
     input: '输入',
     output: '输出'
-  }
+  },
+  /** 客户端兜底中断说明（markStuckTools 写入 failReason，ToolCallCard 直接渲染） */
+  interruptTurn: '回合已结束，客户端未收到该工具的返回结果（可能是被中断或 agent 侧超时）。',
+  interruptReplay: '这是上一次进程里未完成的调用，重启后不会再有结果。'
 }

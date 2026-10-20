@@ -18,7 +18,21 @@ export const mainErrors: typeof zh = {
     outOfBounds: 'The target path escapes the sessions root; move refused',
     collision: (vars) =>
       `A session directory with the same ID already exists under the target; nothing was overwritten: ${vars.path}`,
-    failed: (vars) => `Move failed (the session may be in use by grok): ${vars.message}`
+    failed: (vars) => `Move failed (the session may be in use by grok): ${vars.message}`,
+    failedSimple: 'Move failed',
+    done: 'Moved to the new working directory'
+  },
+  /** User-visible appendNotice strings from renderer actions.ts */
+  notices: {
+    permSwitchFailed: (vars) => `Failed to switch permission mode: ${vars.message}`,
+    alreadyAtCwd: (vars) => `This session already uses ${vars.dir} as its working directory.`,
+    switchedCwd: (vars) => `Switched to working directory ${vars.dir}.`,
+    resumeFailed: (vars) => `Failed to resume session: ${vars.message}`,
+    resumeGone:
+      'The session data on disk no longer exists (it was probably deleted or moved) and cannot be restored. You can remove this entry in the sidebar to avoid repeated errors when opening it.',
+    createFailed: (vars) => `Failed to create session: ${vars.message}`,
+    requestFailed: (vars) => `Request failed: ${vars.message}`,
+    configSwitchFailed: (vars) => `Failed to switch ${vars.id}: ${vars.message}`
   },
   grokCli: {
     binaryMissing:
@@ -50,5 +64,19 @@ export const mainErrors: typeof zh = {
   },
   longShot: {
     dialogTitle: 'Save session long screenshot'
+  },
+  /** User-visible strings from acp/service.ts surfaced in connection state and prompt errors */
+  service: {
+    binaryMissingShort: 'grok executable not found',
+    starting: (vars) => `Starting ${vars.binary}`,
+    exited: (vars) => `agent process exited (code=${vars.code})`,
+    ready: 'agent is ready',
+    stopped: 'Stopped',
+    emptyContent: 'Message content is empty'
+  },
+  /** billing.ts quota fetch failure reasons (shown in the AccountMenu quota row) */
+  billing: {
+    notLoggedIn: 'Not signed in',
+    unavailable: 'Quota information unavailable'
   }
 }

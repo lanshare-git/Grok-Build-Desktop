@@ -18,7 +18,21 @@ export const mainErrors: typeof zh = {
     outOfBounds: '移動先パスが範囲外のため、移動を拒否しました',
     collision: (vars) =>
       `移動先に同名のセッションディレクトリが既に存在するため、上書きしませんでした：${vars.path}`,
-    failed: (vars) => `移動に失敗しました（セッションが grok に使用中の可能性があります）：${vars.message}`
+    failed: (vars) => `移動に失敗しました（セッションが grok に使用中の可能性があります）：${vars.message}`,
+    failedSimple: '移動に失敗しました',
+    done: '新しい作業ディレクトリに移動しました'
+  },
+  /** レンダラー actions.ts の appendNotice によるユーザー向け通知 */
+  notices: {
+    permSwitchFailed: (vars) => `権限モードの切り替えに失敗しました：${vars.message}`,
+    alreadyAtCwd: (vars) => `このセッションは既に ${vars.dir} を作業ディレクトリとしています。`,
+    switchedCwd: (vars) => `作業ディレクトリを ${vars.dir} に切り替えました。`,
+    resumeFailed: (vars) => `セッションの復元に失敗しました：${vars.message}`,
+    resumeGone:
+      'セッションのディスク上のデータが存在しません（削除または移動された可能性が高いです）。復元できません。繰り返しエラーが出るのを避けるため、サイドバーからこの項目を削除できます。',
+    createFailed: (vars) => `セッションの作成に失敗しました：${vars.message}`,
+    requestFailed: (vars) => `リクエストに失敗しました：${vars.message}`,
+    configSwitchFailed: (vars) => `${vars.id} の切り替えに失敗しました：${vars.message}`
   },
   grokCli: {
     binaryMissing:
@@ -50,5 +64,19 @@ export const mainErrors: typeof zh = {
   },
   longShot: {
     dialogTitle: 'セッション長截図を保存'
+  },
+  /** acp/service.ts から接続状態・prompt エラーとしてユーザーに見える文字列 */
+  service: {
+    binaryMissingShort: 'grok 実行ファイルが見つかりません',
+    starting: (vars) => `起動中：${vars.binary}`,
+    exited: (vars) => `agent プロセスが終了しました（code=${vars.code}）`,
+    ready: 'agent が準備完了',
+    stopped: '停止済み',
+    emptyContent: 'メッセージ内容が空です'
+  },
+  /** billing.ts の残高取得失敗理由（AccountMenu の残高行に表示） */
+  billing: {
+    notLoggedIn: '未ログイン',
+    unavailable: '残高情報を取得できません'
   }
 }

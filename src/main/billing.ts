@@ -25,6 +25,7 @@ import { promisify } from 'node:util'
 
 import { resolveGrokHome } from './acp/service'
 import { readConfig } from './config'
+import { t } from './i18n'
 import type { BillingQuota, BillingProductUsage } from '../shared/types'
 
 const execFileAsync = promisify(execFile)
@@ -124,7 +125,7 @@ export async function fetchBillingQuota(force = false): Promise<BillingQuota | n
 
   const token = await readToken()
   if (!token) {
-    cache = { at: Date.now(), value: null, error: '未登录' }
+    cache = { at: Date.now(), value: null, error: t('mainErrors.billing.notLoggedIn') }
     return null
   }
 
@@ -156,5 +157,5 @@ export async function fetchBillingQuotaDetailed(): Promise<{
   error: string
 }> {
   const quota = await fetchBillingQuota(true)
-  return { quota, error: quota ? '' : (cache?.error ?? '额度信息不可用') }
+  return { quota, error: quota ? '' : (cache?.error ?? t('mainErrors.billing.unavailable')) }
 }

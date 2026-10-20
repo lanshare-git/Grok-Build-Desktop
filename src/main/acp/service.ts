@@ -13,6 +13,7 @@ import { join } from 'node:path'
 
 import { AcpClient } from './client'
 import { proxyEnv, readConfig } from '../config'
+import { t } from '../i18n'
 import type {
   AcpToolCall,
   AvailableCommand,
@@ -206,13 +207,11 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   private async doStart(): Promise<InitializeResult> {
     const binary = resolveGrokBinary()
     if (!binary) {
-      this.setState('error', '未找到 grok 可执行文件')
-      throw new Error(
-        '未找到 grok 可执行文件。请确认已安装 Grok Build，或设置环境变量 GROK_BIN 指向 grok 可执行文件。'
-      )
+      this.setState('error', t('mainErrors.service.binaryMissingShort'))
+      throw new Error(t('mainErrors.grokCli.binaryMissing'))
     }
 
-    this.setState('starting', `正在启动 ${binary}`)
+    this.setState('starting', t('mainErrors.service.starting', { binary }))
 
     // 代理：grok（Rust 侧）只认 HTTP_PROXY/HTTPS_PROXY 环境变量，不读系统代理设置。
     // 这里显式注入，否则境外模型端点会直连超时。
@@ -335,7 +334,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       // 进程退出时结算重放等待者：否则正在 await flushReplay 的 loadSession 会一直挂着
       for (const [, settle] of this.replayFlushWaiters) settle()
       this.replayFlushWaiters.clear()
-      this.setState('stopped', `agent 进程已退出（code=${code ?? 'null'}）`)
+      this.setState('stopped', t('mainErrors.service.exited', { code: String(code ?? 'null') }))
     })
 
     client.start()
@@ -361,7 +360,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     }
 
     this.initialized = true
-    this.setState('ready', 'agent 已就绪')
+    this.setState('ready', t('mainErrors.service.ready'))
 
     // 握手结果里带了一份内置命令清单（compact / context / session-info / deep-research …），
     // 它只在 initialize 这一次返回，不接住渲染层就永远看不到。
@@ -663,7 +662,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       }
     }
     if (text) blocks.push({ type: 'text', text })
-    if (blocks.length === 0) throw new Error('消息内容为空')
+    if (blocks.length === 0) throw new Error(t('mainErrors.service.emptyContent'))
 
     return client.request<{ stopReason?: string }>(
       'session/prompt',
@@ -758,6 +757,6 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     this.initialized = false
     this.knownSessions.clear()
     if (client) await client.stop()
-    this.setState('stopped', '已停止')
+    this.setState('stopped', t('mainErrors.service.stopped'))
   }
 }

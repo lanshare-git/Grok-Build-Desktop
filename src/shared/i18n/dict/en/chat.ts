@@ -30,5 +30,7 @@ export const chat: typeof zh = {
       : 'Long screenshot copied to clipboard',
   longShotDoneClipboardOnly: 'Long screenshot copied to clipboard (file not saved)',
   longShotFailed: (vars: { message: string }) => `Long screenshot failed: ${vars.message}`,
-  longShotTruncated: 'Content was too long; only ~16000px below the start were captured'
+  longShotTruncated: 'Content was too long; only ~16000px below the start were captured',
+  longShotNoContent: 'Nothing to capture',
+  longShotNoCanvas: 'Failed to create canvas'
 }

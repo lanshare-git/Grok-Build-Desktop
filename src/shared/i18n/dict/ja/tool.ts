@@ -22,5 +22,8 @@ export const tool: typeof zh = {
     involvedFiles: '関連ファイル',
     input: '入力',
     output: '出力'
-  }
+  },
+  /** クライアント側フォールバックの中断説明（markStuckTools が failReason に書き込み、ToolCallCard がそのまま表示） */
+  interruptTurn: 'ターンは終了しましたが、クライアントはこのツールの結果を受け取っていません（中断されたか、agent 側でタイムアウトした可能性があります）。',
+  interruptReplay: '前回のプロセスで完了しなかった呼び出しです。再起動後は結果が届きません。'
 }

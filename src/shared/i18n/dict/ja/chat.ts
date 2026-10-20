@@ -30,5 +30,7 @@ export const chat: typeof zh = {
       : '長截図をクリップボードにコピーしました',
   longShotDoneClipboardOnly: '長截図をクリップボードにコピーしました（ファイルは未保存）',
   longShotFailed: (vars: { message: string }) => `長截図に失敗しました：${vars.message}`,
-  longShotTruncated: '内容が長すぎるため、起点から約 16000px までを截図しました'
+  longShotTruncated: '内容が長すぎるため、起点から約 16000px までを截図しました',
+  longShotNoContent: '截図できる内容がありません',
+  longShotNoCanvas: 'キャンバスを作成できません'
 }

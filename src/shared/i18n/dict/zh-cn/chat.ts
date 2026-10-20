@@ -27,5 +27,7 @@ export const chat = {
     vars.path ? `长截屏已复制到剪贴板，并保存到 ${vars.path}` : '长截屏已复制到剪贴板',
   longShotDoneClipboardOnly: '长截屏已复制到剪贴板（未另存文件）',
   longShotFailed: (vars: { message: string }) => `长截屏失败：${vars.message}`,
-  longShotTruncated: '内容过长，仅截取了起点以下约 16000px，其余已省略'
+  longShotTruncated: '内容过长，仅截取了起点以下约 16000px，其余已省略',
+  longShotNoContent: '没有可截取的内容',
+  longShotNoCanvas: '无法创建画布'
 }

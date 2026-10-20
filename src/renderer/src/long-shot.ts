@@ -8,6 +8,9 @@
  * 坐标约定：getBoundingClientRect 与 capturePage 的 rect 都是窗口客户区 DIP。
  */
 
+import { t as tShared } from '@shared/i18n'
+import { useStore } from './store'
+
 /** 相邻两帧重叠像素，避免滚屏缝 */
 const OVERLAP_PX = 32
 /** 浏览器 canvas 高度上限附近留余量；超出会截断并在结果里标明 */
@@ -95,7 +98,7 @@ export async function captureLongShotFromElement(
     }
 
     if (slices.length === 0) {
-      throw new Error('没有可截取的内容')
+      throw new Error(tShared(useStore.getState().locale, 'chat.longShotNoContent'))
     }
 
     // 各 slice 的 intrinsic 像素尺寸可能含 DPR；按第一张的 scale 对齐
@@ -111,7 +114,7 @@ export async function captureLongShotFromElement(
     canvas.width = outW
     canvas.height = outH
     const ctx = canvas.getContext('2d')
-    if (!ctx) throw new Error('无法创建画布')
+    if (!ctx) throw new Error(tShared(useStore.getState().locale, 'chat.longShotNoCanvas'))
 
     let dy = 0
     for (let i = 0; i < slices.length; i++) {
