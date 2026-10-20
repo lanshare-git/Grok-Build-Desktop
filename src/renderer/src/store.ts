@@ -4,6 +4,7 @@ import { persist, type PersistStorage, type StorageValue } from 'zustand/middlew
 import type {
   AcpStreamEvent,
   AvailableCommand,
+  BackgroundTask,
   ChatItem,
   ConfigOption,
   ConnectionState,
@@ -575,6 +576,11 @@ interface AppState {
   questions: UserQuestionEvent[]
   /** 右下角全局提示（不持久化） */
   toasts: Toast[]
+  /**
+   * 各会话的后台任务快照（不持久化）。
+   * 来源：`_x.ai/session_notification` → background_tasks；agent 每次推整表。
+   */
+  backgroundTasks: Record<string, BackgroundTask[]>
   logs: string[]
   diagnostics: DiagnosticsReport | null
   /**
@@ -829,6 +835,11 @@ interface AppState {
   /** agent 进程重启/退出时清空全部待响应项（它们已随进程失效） */
   clearAllPrompts(): void
 
+  /** 替换某会话的后台任务列表（agent 推送的是整表快照） */
+  setBackgroundTasks(sessionId: string, tasks: BackgroundTask[]): void
+  /** agent 重启时清掉全部后台任务（旧进程里的任务已不可达） */
+  clearBackgroundTasks(): void
+
   /** 弹出一条右下角提示，返回其 id */
   pushToast(toast: Omit<Toast, 'id' | 'createdAt'> & { id?: string }): string
   dismissToast(id: string): void
@@ -1077,6 +1088,7 @@ export const useStore = create<AppState>()(
       permissions: [],
       questions: [],
       toasts: [],
+      backgroundTasks: {},
       logs: [],
       diagnostics: null,
       settingsSection: null,
@@ -1842,6 +1854,19 @@ advanceReplayProgress: (sessionId, applied) =>
           // 只清掉与请求绑定的提示；连接类提示（无 requestId）保留
           toasts: s.toasts.filter((t) => t.requestId === undefined)
         })),
+
+      setBackgroundTasks: (sessionId, tasks) =>
+        set((s) => {
+          // 空表：删掉该 key，避免 Record 无限膨胀
+          if (tasks.length === 0) {
+            if (!(sessionId in s.backgroundTasks)) return s
+            const next = { ...s.backgroundTasks }
+            delete next[sessionId]
+            return { backgroundTasks: next }
+          }
+          return { backgroundTasks: { ...s.backgroundTasks, [sessionId]: tasks } }
+        }),
+      clearBackgroundTasks: () => set({ backgroundTasks: {} }),
 
       pushToast: (toast) => {
         const id = toast.id ?? `toast-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`

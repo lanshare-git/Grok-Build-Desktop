@@ -7,6 +7,7 @@ import { sidebar } from './zh-cn/sidebar'
 import { welcome } from './zh-cn/welcome'
 import { sessionTools } from './zh-cn/sessionTools'
 import { composer } from './zh-cn/composer'
+import { bgTasks } from './zh-cn/bgTasks'
 import { header } from './zh-cn/header'
 import { prompts } from './zh-cn/prompts'
 import { settings } from './zh-cn/settings'
@@ -29,6 +30,7 @@ export const zhCN = {
   welcome,
   sessionTools,
   composer,
+  bgTasks,
   header,
   prompts,
   settings,

@@ -8,6 +8,7 @@ import { sidebar } from './ja/sidebar'
 import { welcome } from './ja/welcome'
 import { sessionTools } from './ja/sessionTools'
 import { composer } from './ja/composer'
+import { bgTasks } from './ja/bgTasks'
 import { header } from './ja/header'
 import { prompts } from './ja/prompts'
 import { settings } from './ja/settings'
@@ -30,6 +31,7 @@ export const ja: Messages = {
   welcome,
   sessionTools,
   composer,
+  bgTasks,
   header,
   prompts,
   settings,

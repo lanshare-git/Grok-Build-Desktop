@@ -24,6 +24,7 @@ import type {
   PermissionRequestEvent,
   SessionNewResult,
   SessionUpdateEnvelope,
+  BackgroundTasksEvent,
   TurnCompleteEvent,
   UserQuestionAnswers,
   UserQuestionEvent,
@@ -47,6 +48,8 @@ export interface AgentServiceEvents {
    * 与 session/prompt 的 JSON-RPC 返回成对；只等后者会在 prompt 迟滞时卡在「正在工作」。
    */
   turnComplete: [TurnCompleteEvent]
+  /** 后台任务整表快照（长命令 / 子代理等） */
+  backgroundTasks: [BackgroundTasksEvent]
 }
 
 export function resolveGrokHome(): string {
@@ -71,6 +74,34 @@ function attachAgentTimestamp(
       ? (update._meta as Record<string, unknown>)
       : {}
   return { ...update, _meta: { ...prev, agentTimestampMs } }
+}
+
+/** 把 agent 下发的 snake_case 后台任务条目归一成桌面端结构 */
+function normalizeBackgroundTask(raw: unknown): BackgroundTasksEvent['tasks'][number] | null {
+  if (!raw || typeof raw !== 'object') return null
+  const t = raw as Record<string, unknown>
+  const taskId = typeof t.task_id === 'string' ? t.task_id : typeof t.taskId === 'string' ? t.taskId : ''
+  if (!taskId) return null
+  return {
+    taskId,
+    command: typeof t.command === 'string' ? t.command : undefined,
+    description: typeof t.description === 'string' ? t.description : undefined,
+    cwd: typeof t.cwd === 'string' ? t.cwd : undefined,
+    kind: typeof t.kind === 'string' ? t.kind : undefined,
+    status: typeof t.status === 'string' ? t.status : 'running',
+    startedAt: typeof t.started_at === 'string' ? t.started_at : typeof t.startedAt === 'string' ? t.startedAt : undefined,
+    endedAt: typeof t.ended_at === 'string' ? t.ended_at : typeof t.endedAt === 'string' ? t.endedAt : undefined,
+    outputFile:
+      typeof t.output_file === 'string' ? t.output_file : typeof t.outputFile === 'string' ? t.outputFile : undefined,
+    exitCode:
+      typeof t.exit_code === 'number'
+        ? t.exit_code
+        : typeof t.exitCode === 'number'
+          ? t.exitCode
+          : t.exit_code === null || t.exitCode === null
+            ? null
+            : undefined
+  }
 }
 
 /** 依次尝试：环境变量 → PATH → GROK_HOME/bin → ~/.grok/bin */
@@ -275,6 +306,20 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
           this.announcements = list
           this.emitMeta()
         }
+        return
+      }
+      // 后台任务快照：长命令 background=true / Ctrl+B 等价路径、子代理、monitor、loop。
+      // agent 推的是整表（含空数组），不是增量 —— 渲染层直接替换即可。
+      if (method === '_x.ai/session_notification' && params?.sessionId) {
+        const update = (params as { update?: { sessionUpdate?: string; tasks?: unknown[] } }).update
+        if (update?.sessionUpdate === 'background_tasks' && Array.isArray(update.tasks)) {
+          this.emit('backgroundTasks', {
+            sessionId: String(params.sessionId),
+            tasks: update.tasks.map(normalizeBackgroundTask).filter(Boolean) as BackgroundTasksEvent['tasks']
+          })
+          return
+        }
+        // 其它 session_notification（model_changed / response_completed …）暂不消费
         return
       }
       this.log(`[notification] ${method}`)

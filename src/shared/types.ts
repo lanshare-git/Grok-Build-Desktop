@@ -790,6 +790,32 @@ export interface TurnCompleteEvent {
   stopReason?: string
 }
 
+/**
+ * 后台任务（`_x.ai/session_notification` → `background_tasks`）。
+ * agent 把长命令 / 子代理 / monitor / loop 挂到后台后，会推整表快照；
+ * 桌面端此前丢弃该通知，回合结束后用户看不到「还有东西在跑」。
+ */
+export type BackgroundTaskStatus = 'running' | 'completed' | 'failed' | 'cancelled' | string
+
+export interface BackgroundTask {
+  taskId: string
+  command?: string
+  description?: string
+  cwd?: string
+  /** bash / subagent / monitor / loop … */
+  kind?: string
+  status: BackgroundTaskStatus
+  startedAt?: string
+  endedAt?: string
+  outputFile?: string
+  exitCode?: number | null
+}
+
+export interface BackgroundTasksEvent {
+  sessionId: string
+  tasks: BackgroundTask[]
+}
+
 export interface ConnectionEvent {
   state: ConnectionState
   message?: string

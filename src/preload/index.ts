@@ -13,6 +13,7 @@ import type {
   NewSessionOptions,
   PermissionRequestEvent,
   ToolCallDensity,
+  BackgroundTasksEvent,
   TurnCompleteEvent,
   UserQuestionAnswers,
   UserQuestionEvent
@@ -80,6 +81,8 @@ const api: GrokDesktopApi = {
   onMeta: (cb: (meta: AgentMetaEvent) => void) => subscribe(CH.pushMeta, cb),
   onTurnComplete: (cb: (event: TurnCompleteEvent) => void) =>
     subscribe(CH.pushTurnComplete, cb),
+  onBackgroundTasks: (cb: (event: BackgroundTasksEvent) => void) =>
+    subscribe(CH.pushBackgroundTasks, cb),
 
   mcpList: () => ipcRenderer.invoke(CH.mcpList),
   mcpAdd: (server: McpServerInput) => ipcRenderer.invoke(CH.mcpAdd, server),

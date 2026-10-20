@@ -1,12 +1,38 @@
 import { memo, useState } from 'react'
 
-import type { ChatItem } from '@shared/types'
+import type { ChatItem, ToolStatus } from '@shared/types'
 import { useT } from '../i18n'
 import { toolIconName } from '../utils'
 import ToolCallCard from './ToolCallCard'
-import { IconChevron, IconClose, IconFile, IconList, IconSearch, IconStop, IconTerminal } from './Icons'
+import {
+  IconCheck,
+  IconChevron,
+  IconClose,
+  IconFile,
+  IconList,
+  IconSearch,
+  IconStop,
+  IconTerminal
+} from './Icons'
 
 type ToolItem = Extract<ChatItem, { kind: 'tool' }>
+
+/** 汇总卡左侧竖条颜色：跟单卡同一套 tool-* 状态类，避免「全都已完成却是灰条」 */
+function aggregateStatusClass(items: ToolItem[]): string {
+  if (items.some((i) => i.status === 'failed')) return 'tool-failed'
+  if (items.some((i) => i.status === 'interrupted')) return 'tool-interrupted'
+  if (items.some((i) => i.status === 'in_progress' || i.status === 'pending')) return 'tool-in_progress'
+  if (items.length > 0 && items.every((i) => i.status === 'completed')) return 'tool-completed'
+  return ''
+}
+
+function aggregateStatus(items: ToolItem[]): ToolStatus | null {
+  if (items.some((i) => i.status === 'failed')) return 'failed'
+  if (items.some((i) => i.status === 'interrupted')) return 'interrupted'
+  if (items.some((i) => i.status === 'in_progress' || i.status === 'pending')) return 'in_progress'
+  if (items.length > 0 && items.every((i) => i.status === 'completed')) return 'completed'
+  return null
+}
 
 /**
  * 工具调用汇总卡 —— 对应 grok 1.0.52 的 `compact-grouped` / `compact-all-grouped`：
@@ -28,6 +54,7 @@ function ToolGroupCardImpl({ items }: { items: ToolItem[] }): JSX.Element {
   // 中断**不并入失败**：失败是 agent 明确报错，中断只是没收到结果，混在一个数里会误导
   const interrupted = items.filter((i) => i.status === 'interrupted').length
   const running = items.filter((i) => i.status === 'in_progress' || i.status === 'pending').length
+  const status = aggregateStatus(items)
 
   const iconName = toolIconName(first.toolKind, first.toolName)
   const Icon =
@@ -40,7 +67,7 @@ function ToolGroupCardImpl({ items }: { items: ToolItem[] }): JSX.Element {
           : IconFile
 
   return (
-    <div className={`tool-card tool-group${failed > 0 ? ' tool-failed' : ''}`}>
+    <div className={`tool-card tool-group ${aggregateStatusClass(items)}`.trim()}>
       <button className="tool-head" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
         <IconChevron size={13} className={`tool-chevron${open ? ' is-open' : ''}`} />
         <Icon size={13} className="tool-icon" />
@@ -61,6 +88,12 @@ function ToolGroupCardImpl({ items }: { items: ToolItem[] }): JSX.Element {
           </span>
         )}
         {running > 0 && <span className="tool-status">{t('tool.group.inProgress')}</span>}
+        {status === 'completed' && failed === 0 && interrupted === 0 && running === 0 && (
+          <span className="tool-status">
+            <IconCheck size={13} className="status-ok" />
+            {t('tool.status.completed')}
+          </span>
+        )}
       </button>
 
       {open && (

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-import { cleanError } from '../actions'
+import { cleanError, refreshDiagnostics } from '../actions'
 import { useStore } from '../store'
 import { useT } from '../i18n'
 import type { GrokUpdateInfo, GrokVersionInfo } from '@shared/types'
@@ -14,6 +14,11 @@ import { IconDownload, IconRefresh } from './Icons'
  *  客户端与终端版共用同一份 agent（~/.grok/bin/grok.exe），所以升级 grok 会同时
  *  影响两端。这里把 `grok version` 与 `grok update` 摆到明面上：
  *  先看有没有新版本，再决定是否安装（安装会自动重启 agent）。
+ *
+ *  账号菜单 / 关于面板读的是 store.diagnostics.version（启动时跑一次的自检缓存）。
+ *  本面板自己的 `version` state 和那份缓存是两路：只刷新本地 state 的话，
+ *  设置页已显示 1.0.62、左下角账号菜单仍卡在旧号 —— 所以 check/install 后
+ *  必须顺带 refreshDiagnostics。
  * ------------------------------------------------------------------ */
 
 export default function VersionPanel(): JSX.Element {
@@ -39,6 +44,8 @@ export default function VersionPanel(): JSX.Element {
       ])
       setVersion(ver)
       setUpdate(upd)
+      // 同步账号菜单 / 关于面板上的 grok 版本号（与本面板是两套数据源）
+      void refreshDiagnostics()
     } catch (err) {
       setError(cleanError(err))
     } finally {

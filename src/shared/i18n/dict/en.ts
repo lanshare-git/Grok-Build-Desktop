@@ -8,6 +8,7 @@ import { sidebar } from './en/sidebar'
 import { welcome } from './en/welcome'
 import { sessionTools } from './en/sessionTools'
 import { composer } from './en/composer'
+import { bgTasks } from './en/bgTasks'
 import { header } from './en/header'
 import { prompts } from './en/prompts'
 import { settings } from './en/settings'
@@ -30,6 +31,7 @@ export const en: Messages = {
   welcome,
   sessionTools,
   composer,
+  bgTasks,
   header,
   prompts,
   settings,

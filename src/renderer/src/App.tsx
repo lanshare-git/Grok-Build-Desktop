@@ -15,6 +15,7 @@ import {
 import { mostRecentWorkspaceCwd } from './utils'
 import ChatView from './components/ChatView'
 import CloseActionDialog from './components/CloseActionDialog'
+import BackgroundTasksBar from './components/BackgroundTasksBar'
 import Composer from './components/Composer'
 import Header from './components/Header'
 import SettingsDialog from './components/SettingsDialog'
@@ -104,6 +105,7 @@ export default function App(): JSX.Element {
         // 进程没了，挂起的授权/提问随之失效，一并清掉，别让界面留一张永远答不完的卡
         if (e.state === 'starting' || e.state === 'stopped' || e.state === 'error') {
           st.clearAllPrompts()
+          st.clearBackgroundTasks()
         }
         // 连接异常改走右下角提示，不再占用任务界面
         if (e.state === 'error') {
@@ -140,6 +142,9 @@ export default function App(): JSX.Element {
       window.grok.onStream((e) => enqueueStreamEvent(e)),
       // agent 回合终态：不等 session/prompt RPC，立刻收尾「正在工作」
       window.grok.onTurnComplete((e) => onAgentTurnCompleted(e.sessionId)),
+      window.grok.onBackgroundTasks((e) => {
+        useStore.getState().setBackgroundTasks(e.sessionId, e.tasks)
+      }),
       window.grok.onPermission((e) => {
         // 授权提醒改走主进程桌面浮窗（可直接点按钮）；当前会话前台只靠内联面板
         useStore.getState().setPermission(e)
@@ -251,6 +256,8 @@ export default function App(): JSX.Element {
         </div>
         {/* 任务内嵌「待响应」区：只显示当前任务的授权/提问，固定在输入框上方 */}
         {activeId && <TaskPrompts />}
+        {/* 后台任务（长命令 / 子代理）：回合结束后仍在跑时要看得见 */}
+        {activeId && <BackgroundTasksBar />}
         {activeId && <Composer />}
       </main>
       {/* 设置中心：统一收纳 通用 / MCP 服务 / 插件 / 存储 / 环境自检 / 关于 */}

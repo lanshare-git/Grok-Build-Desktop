@@ -87,6 +87,7 @@ export function registerIpc(service: AgentService): void {
   /* ---------- AgentService 事件 -> 渲染进程 ---------- */
   service.on('stream', (event) => broadcast(CH.pushStream, event))
   service.on('turnComplete', (event) => broadcast(CH.pushTurnComplete, event))
+  service.on('backgroundTasks', (event) => broadcast(CH.pushBackgroundTasks, event))
   service.on('state', (event) => {
     console.log('[agent-state]', event.state, event.message ?? '')
     broadcast(CH.pushState, event)

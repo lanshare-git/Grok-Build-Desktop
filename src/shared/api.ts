@@ -4,6 +4,7 @@ import type { Locale } from './i18n/types'
 import type {
   AcpStreamEvent,
   AgentMetaEvent,
+  BackgroundTasksEvent,
   TurnCompleteEvent,
   BillingQuota,
   CloseAction,
@@ -329,6 +330,8 @@ export interface GrokDesktopApi {
    * 用来立刻清掉「Agent 正在工作…」；prompt 的 finally 仍会再跑一遍（幂等）。
    */
   onTurnComplete(cb: (event: TurnCompleteEvent) => void): () => void
+  /** 后台任务快照（长命令 / 子代理等仍在跑时输入框上方要提示） */
+  onBackgroundTasks(cb: (event: BackgroundTasksEvent) => void): () => void
   /** 系统通知被点击：切到对应会话处理待授权/提问 */
   onFocusSession(cb: (event: { sessionId: string }) => void): () => void
   /** 授权已在别处处理（桌面浮窗或本窗口）：清掉对应 permission 卡 */

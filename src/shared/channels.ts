@@ -122,6 +122,8 @@ export const CH = {
   pushStream: 'push:stream',
   /** agent 回合终态（turn_completed / prompt_complete），用于立刻收尾 running */
   pushTurnComplete: 'push:turn-complete',
+  /** 后台任务快照（`_x.ai/session_notification` → background_tasks） */
+  pushBackgroundTasks: 'push:background-tasks',
   /** 主进程请求渲染层弹窗询问「关闭时如何」（配置为空时触发） */
   closeActionRequest: 'close:action-request',
   pushState: 'push:state',
