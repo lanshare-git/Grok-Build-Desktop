@@ -305,8 +305,29 @@ export async function newChatSession(): Promise<void> {
   await newSession(target, 'chat', 'plan')
 }
 
+/**
+ * 进行中的 resumeSession（按 sessionId 合并）。
+ * 启动时 `onState(ready)` 与侧栏点击常会叠在一起，两次 beginSessionReload +
+ * 两次 session/load 会触发 grok 的 superseded → 界面红条「Invalid params」。
+ */
+const resumingSessions = new Map<string, Promise<void>>()
+
 /** 恢复已有会话：ACP session/load 会重放历史为 session/update */
 export async function resumeSession(sessionId: string, cwd: string): Promise<void> {
+  const inflight = resumingSessions.get(sessionId)
+  if (inflight) {
+    // 仍要切到该会话（第二次点击的意图是「打开它」）
+    useStore.getState().selectSession(sessionId)
+    return inflight
+  }
+  const pending = resumeSessionInner(sessionId, cwd).finally(() => {
+    resumingSessions.delete(sessionId)
+  })
+  resumingSessions.set(sessionId, pending)
+  return pending
+}
+
+async function resumeSessionInner(sessionId: string, cwd: string): Promise<void> {
   const store = useStore.getState()
   // 草稿会话尚未在 grok 中创建，不能去 loadSession —— 直接选中即可（空 ChatView + 输入框）
   const existing = store.sessions.find((x) => x.id === sessionId)
@@ -346,7 +367,7 @@ export async function resumeSession(sessionId: string, cwd: string): Promise<voi
     // 把当前权限模式同步到刚加载的会话（session/load 不携带权限模式）
     await applyPermissionModeToSession(sessionId)
     // 主进程报的重放总条数：供 stream-queue 判断「是否已排空」——
- // 绝不能靠「队列瞬时为空」判断（update 还在路上时会提前宣告完成）。
+    // 绝不能靠「队列瞬时为空」判断（update 还在路上时会提前宣告完成）。
     finishReplayIfIdle(sessionId, res?.replayed ?? 0)
     // session/load 会往 events.jsonl 追加 mcp_*；用过滤后的回合时间校正侧栏，
     // 避免「只是点开看一眼」把活动时间刷成现在（见 session-activity.ts）。
@@ -357,6 +378,26 @@ export async function resumeSession(sessionId: string, cwd: string): Promise<voi
     // session/load 只会回一个 `Path not found (FS_NOT_FOUND)`。这时给用户能自助处理的
     // 说明，而不是把协议层错误原样甩出去（2026-10-14 事故的可见症状就是这条报错）。
     const missingOnDisk = /FS_NOT_FOUND|Path not found/i.test(raw)
+    // 并发 load 被后到的挤掉：主进程已合并请求后不应再出现；若仍撞上则静默重试一次。
+    const superseded = /superseded/i.test(raw)
+    if (superseded) {
+      try {
+        const res = await window.grok.loadSession(sessionId, cwd)
+        useStore.getState().markSessionLoaded(sessionId)
+        await applyPermissionModeToSession(sessionId)
+        finishReplayIfIdle(sessionId, res?.replayed ?? 0)
+        void useStore.getState().refreshActivity([sessionId])
+        return
+      } catch (retryErr) {
+        useStore.getState().appendNotice(
+          sessionId,
+          `恢复会话失败：${cleanError(retryErr)}`,
+          'error'
+        )
+        useStore.getState().finishSessionReplay(sessionId)
+        return
+      }
+    }
     useStore.getState().appendNotice(
       sessionId,
       missingOnDisk

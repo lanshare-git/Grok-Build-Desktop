@@ -126,6 +126,13 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
 
   /** 当前 agent 进程内已创建/加载过的会话。进程重启后清空，prompt 前需 ensureSession */
   private knownSessions = new Set<string>()
+  /**
+   * 进行中的 session/load（按 sessionId 合并）。
+   * grok 对同一会话并发 load 会让先发的那条以 `-32602 Invalid params
+   * （session load was superseded）` 失败，界面就出现「恢复会话失败」。
+   * 启动连点 / ready 回调与侧栏点击重叠时极易踩中。
+   */
+  private loadingSessions = new Map<string, Promise<SessionNewResult>>()
 
   /** agent 上报的内置命令（initialize 的 availableCommands）与公告，供渲染层展示 */
   private agentCommands: AvailableCommand[] = []
@@ -480,7 +487,6 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
 
   async loadSession(sessionId: string, cwd: string): Promise<SessionNewResult> {
     await this.start()
-    const client = this.requireClient()
     // 已在当前 agent 进程里加载过的会话，**不能再发 session/load**：
     // grok 对同一 session 重复 load 会把整段历史再重放一遍（实测连发 3 次，
     // 每次都重放 168 条），而重放是以「追加」语义进入渲染层的，
@@ -489,6 +495,30 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       this.log(`[load] ${sessionId} 已在当前 agent 进程内，跳过重复 session/load`)
       return {} as SessionNewResult
     }
+    const inflight = this.loadingSessions.get(sessionId)
+    if (inflight) {
+      this.log(`[load] ${sessionId} 已有加载进行中，复用同一请求（避免 superseded）`)
+      return inflight
+    }
+    const pending = this.loadSessionInner(sessionId, cwd).finally(() => {
+      this.loadingSessions.delete(sessionId)
+    })
+    this.loadingSessions.set(sessionId, pending)
+    return pending
+  }
+
+  private async loadSessionInner(sessionId: string, cwd: string): Promise<SessionNewResult> {
+    const client = this.requireClient()
+    // cwd 缺失时 JSON 会丢掉该字段，grok 直接 -32602 Invalid params
+    const resolvedCwd = typeof cwd === 'string' ? cwd.trim() : ''
+    if (!sessionId?.trim()) {
+      throw new Error('session/load 失败：缺少 sessionId')
+    }
+    if (!resolvedCwd) {
+      throw new Error(
+        'session/load 失败：缺少工作目录（cwd）。请确认会话仍挂在正确的工作区下。'
+      )
+    }
     // 开始缓存该会话的重放通知
     this.replayBuffers.set(sessionId, [])
     const startedAt = Date.now()
@@ -496,10 +526,10 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     try {
       result = await client.request<SessionNewResult>('session/load', {
         sessionId,
-        cwd,
+        cwd: resolvedCwd,
         mcpServers: []
       })
-    this.knownSessions.add(sessionId)
+      this.knownSessions.add(sessionId)
     } finally {
       // session/load 返回 ≈ 重放结束；再留一段静默期兜底捕获零星尾随通知。
       // 上限 2s：用户紧接着发消息时，首批生成内容也不至于被缓存憋太久。
@@ -676,6 +706,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     // 会永久挂起（停进程时正好在加载大会话就会触发）
     for (const [, settle] of this.replayFlushWaiters) settle()
     this.replayFlushWaiters.clear()
+    this.loadingSessions.clear()
 
     const client = this.client
     this.client = null

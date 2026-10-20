@@ -28,6 +28,7 @@ export interface ImageContentBlock {
   data: string
   mimeType: string
   uri?: string
+  name?: string
 }
 
 export type ContentBlock = TextContentBlock | ResourceLinkBlock | ImageContentBlock
@@ -119,7 +120,8 @@ export interface AvailableCommand {
  */
 export interface SessionUpdateEnvelope {
   sessionUpdate: string
-  content?: TextContentBlock
+  /** 文本 / 图片 / resource_link；user_message_chunk 重放时常见 image 块 */
+  content?: ContentBlock
   toolCallId?: string
   title?: string
   kind?: string

@@ -164,7 +164,17 @@ export class AcpClient extends EventEmitter<AcpClientEvents> {
       this.pending.delete(message.id)
       clearTimeout(call.timer)
       if (message.error) {
-        call.reject(new Error(`${call.method} 失败：${message.error.message ?? JSON.stringify(message.error)}`))
+        // grok 的 -32602 常把真正原因放在 data（如 session load was superseded），
+        // 只展示 message 会变成难懂的「Invalid params」。
+        const err = message.error as { message?: string; data?: unknown }
+        const head = err.message ?? JSON.stringify(message.error)
+        const data =
+          typeof err.data === 'string'
+            ? err.data
+            : err.data != null
+              ? JSON.stringify(err.data)
+              : ''
+        call.reject(new Error(`${call.method} 失败：${data ? `${head}（${data}）` : head}`))
       } else {
         call.resolve(message.result ?? {})
       }

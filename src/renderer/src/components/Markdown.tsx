@@ -3,6 +3,8 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 
+import ZoomableImage from './ZoomableImage'
+
 interface Props {
   text: string
 }
@@ -73,7 +75,7 @@ function MarkdownImage({
   if (broken || resolved === null) return <MarkdownImageFallback uri={src} />
   if (resolved === undefined) return null
   return (
-    <img
+    <ZoomableImage
       className="msg-media"
       src={resolved}
       alt={alt ?? ''}

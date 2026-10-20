@@ -14,6 +14,7 @@ import PlanPanel from './PlanPanel'
 import ThinkingBlock from './ThinkingBlock'
 import ToolCallCard from './ToolCallCard'
 import ToolGroupCard from './ToolGroupCard'
+import ZoomableImage from './ZoomableImage'
 import { densityGroupsTools } from '@shared/types'
 import { IconCopy, IconEdit } from './Icons'
 
@@ -151,7 +152,7 @@ function MediaView({ media }: { media: MediaAttachment[] }): JSX.Element | null 
           onError={() => setFailed((f) => ({ ...f, [m.uri]: true }))}
         />
       ) : (
-        <img
+        <ZoomableImage
           key={m.uri}
           className="msg-media"
           src={src}
@@ -547,7 +548,7 @@ export default function ChatView(): JSX.Element {
                       {item.images && item.images.length > 0 && (
                         <div className="bubble-images">
                           {item.images.map((img, i) => (
-                            <img
+                            <ZoomableImage
                               key={i}
                               src={`data:${img.mimeType};base64,${img.data}`}
                               alt={img.name ?? t('chat.imageFallback')}

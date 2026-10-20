@@ -324,6 +324,27 @@ function appendText(items: ChatItem[], kind: TextKind, text?: string, at = Date.
   ]
 }
 
+function contentText(content: SessionUpdateEnvelope['content']): string | undefined {
+  return content?.type === 'text' ? content.text : undefined
+}
+
+/**
+ * 把用户附图挂到最近一条用户气泡上。
+ *
+ * session/load 重放时 grok 先推 `user_message_chunk`（type=image），再推文字 chunk；
+ * 以前只认 text，图片块被直接丢掉 → 重启/切会话后「一起发出的图」消失。
+ */
+function appendUserImage(items: ChatItem[], img: ImageAttachment, at = Date.now()): ChatItem[] {
+  if (!img.data || !img.mimeType) return items
+  const last = items[items.length - 1]
+  if (last?.kind === 'user') {
+    const prev = last.images ?? []
+    if (prev.some((x) => x.data === img.data)) return items
+    return [...items.slice(0, -1), { ...last, images: [...prev, img] }]
+  }
+  return [...finalize(items), { kind: 'user', id: uid(), text: '', images: [img], at }]
+}
+
 /** 由 mimeType / uri 后缀推断媒体类型（resource_link 可能不带 mimeType） */
 function guessMediaKind(uri?: string, mimeType?: string): 'video' | 'image' | null {
   const mt = (mimeType || '').toLowerCase()
@@ -449,15 +470,28 @@ function reduceUpdate(items: ChatItem[], update: SessionUpdateEnvelope): ChatIte
   const at = eventAt(update)
   switch (update.sessionUpdate) {
     case 'user_message_chunk': {
+      const content = update.content
+      // 附图：type=image + base64 data（与文字分两条 chunk，常见顺序是图→文）
+      if (content?.type === 'image' && content.data) {
+        return appendUserImage(
+          items,
+          {
+            data: content.data,
+            mimeType: content.mimeType || 'image/png',
+            name: content.name
+          },
+          at
+        )
+      }
       // agent 注入的 <system-reminder> 等会以 user_message_chunk 下发，不能画成用户气泡
-      const raw = update.content?.text
+      const raw = content && content.type === 'text' ? content.text : undefined
       if (!raw) return items
       const text = stripAgentNoise(raw)
       if (!text) return items
       return appendText(items, 'user', text, at)
     }
     case 'agent_message_chunk': {
-      const text = update.content?.text
+      const text = contentText(update.content)
       const media = mediaFromUpdate(update)
       // 文本与媒体可能分多条 chunk 到达，但都属于同一条流式助手消息
       let next = text ? appendText(items, 'assistant', text, at) : items
@@ -465,7 +499,7 @@ function reduceUpdate(items: ChatItem[], update: SessionUpdateEnvelope): ChatIte
       return next
     }
     case 'agent_thought_chunk':
-      return appendText(items, 'thinking', update.content?.text, at)
+      return appendText(items, 'thinking', contentText(update.content), at)
     case 'tool_call':
     case 'tool_call_update':
       return upsertTool(items, update, at)

@@ -1168,6 +1168,110 @@ pre {
   object-fit: cover;
 }
 
+/* 聊天图片可点击放大 */
+.zoomable-image {
+  cursor: zoom-in;
+}
+.zoomable-image:focus-visible {
+  outline: 2px solid var(--accent, #3b82f6);
+  outline-offset: 2px;
+}
+
+.image-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  background: rgba(10, 14, 22, 0.88);
+  animation: fade 0.12s ease;
+  user-select: none;
+}
+.image-lightbox-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px 12px;
+  flex-shrink: 0;
+}
+.image-lightbox-toolbar .icon-btn {
+  color: #e8edf5;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.image-lightbox-toolbar .icon-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.16);
+}
+.image-lightbox-toolbar .icon-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.image-lightbox-zoom-glyph {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+  font-weight: 500;
+}
+.image-lightbox-scale {
+  min-width: 52px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #e8edf5;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.image-lightbox-scale:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+.image-lightbox-stage {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  cursor: default;
+  touch-action: none;
+}
+.image-lightbox-stage.is-panning {
+  cursor: grab;
+}
+.image-lightbox-stage.is-panning:active {
+  cursor: grabbing;
+}
+.image-lightbox-img {
+  object-fit: contain;
+  /* 未拿到 natural 尺寸前先适应窗口，避免闪巨大原图 */
+  max-width: min(96vw, 100%);
+  max-height: calc(100vh - 96px);
+  transform-origin: center center;
+  will-change: transform, width, height;
+  pointer-events: none;
+  border-radius: 4px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.45);
+  image-rendering: auto;
+}
+/* JS 按原图像素设宽高后放开上限，才能从原图重采样（否则放大只是糊的缩略图） */
+.image-lightbox-img.is-sized {
+  max-width: none;
+  max-height: none;
+}
+.image-lightbox-hint {
+  flex-shrink: 0;
+  text-align: center;
+  padding: 8px 12px 14px;
+  font-size: 11.5px;
+  color: rgba(232, 237, 245, 0.55);
+}
+
 /* 输入框附件预览条 */
 .attach-strip {
   display: flex;
