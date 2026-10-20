@@ -518,8 +518,8 @@ pre {
   border-radius: var(--radius);
   background: var(--bg-raised);
   box-shadow: var(--shadow-md);
-  /* 纯展示：不能挡住下方会话行与按钮的点击 */
-  pointer-events: none;
+  /* 贴在侧栏右侧主区上方，需可点（复制路径 / 在资源管理器打开） */
+  pointer-events: auto;
   display: flex;
   flex-direction: column;
   gap: 6px;

@@ -24,28 +24,33 @@ export interface MoveTarget {
  * 外加一个 ACP `session/close`（卸载）：只释放 agent 进程里该会话的副本，
  * 磁盘数据与会话列表都不动，下次打开会重新加载历史。
  *
+ * 排障项（长截屏、导出诊断包）默认隐藏：打开菜单后按 Shift，或 Shift+右键打开才露出。
+ *
  * 「移动到工作目录」= 把会话的落盘目录搬到目标 cwd 下（grok 没有改会话目录的接口，
  * 只能搬磁盘；实证见 main/session-move.ts）。侧栏里也可以直接把会话拖到分组上。
  *
- * 定位与 session-preview 一致：position:fixed + getBoundingClientRect，
- * 避免被侧栏滚动容器裁剪。
+ * 由侧栏会话行右键打开；定位用鼠标坐标（position:fixed），避免被侧栏滚动容器裁剪。
  */
 export default function SessionToolsMenu({
   session,
-  anchor,
+  point,
   onClose,
   moveTargets,
   onRequestMove,
-  onRequestDelete
+  onRequestDelete,
+  /** 打开菜单时是否已按着 Shift（Shift+右键可立刻露出排障项） */
+  openedWithShift = false
 }: {
   session: SessionMeta
-  anchor: HTMLElement | null
+  /** 右键落点（viewport 坐标） */
+  point: { x: number; y: number }
   onClose: () => void
   /** 可搬运的目标工作目录（已排除它自己所在的那个） */
   moveTargets: MoveTarget[]
   onRequestMove: (toCwd: string, label: string) => void
   /** 交给侧栏既有的删除确认流程（两档勾选 + 回收站），不在这里重写一套 */
   onRequestDelete: () => void
+  openedWithShift?: boolean
 }): JSX.Element | null {
   const loadedSessions = useStore((s) => s.loadedSessions)
   const running = useStore((s) => s.running)
@@ -55,15 +60,15 @@ export default function SessionToolsMenu({
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
+  // 排障项（长截屏 / 诊断包）默认隐藏；按住 Shift 或 Shift+右键打开后露出，本菜单关闭前保持显示
+  const [showTroubleshoot, setShowTroubleshoot] = useState(openedWithShift)
 
   useLayoutEffect(() => {
-    if (!anchor) return
     const place = (): void => {
-      const r = anchor.getBoundingClientRect()
       const width = 232
       setPos({
-        top: Math.min(r.bottom + 4, Math.max(12, window.innerHeight - 380)),
-        left: Math.min(r.right + 6, window.innerWidth - width - 12)
+        top: Math.min(point.y, Math.max(12, window.innerHeight - 380)),
+        left: Math.min(point.x, window.innerWidth - width - 12)
       })
     }
     place()
@@ -73,16 +78,16 @@ export default function SessionToolsMenu({
       window.removeEventListener('resize', place)
       window.removeEventListener('scroll', place, true)
     }
-  }, [anchor])
+  }, [point.x, point.y])
 
   useEffect(() => {
     const onDown = (e: MouseEvent): void => {
       if (menuRef.current?.contains(e.target as Node)) return
-      if (anchor?.contains(e.target as Node)) return
       onClose()
     }
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') onClose()
+      if (e.key === 'Shift') setShowTroubleshoot(true)
     }
     document.addEventListener('mousedown', onDown)
     document.addEventListener('keydown', onKey)
@@ -90,7 +95,7 @@ export default function SessionToolsMenu({
       document.removeEventListener('mousedown', onDown)
       document.removeEventListener('keydown', onKey)
     }
-  }, [anchor, onClose])
+  }, [onClose])
 
   if (!pos) return null
 
@@ -181,29 +186,33 @@ export default function SessionToolsMenu({
         {busy === 'export' ? t('sessionTools.exporting') : t('sessionTools.exportMarkdown')}
       </button>
 
-      <button
-        className="account-menu-item"
-        role="menuitem"
-        disabled={busy !== null || session.isDraft}
-        title={
-          session.isDraft ? t('sessionTools.traceTitleDraft') : t('sessionTools.longShotTitle')
-        }
-        onClick={() => void doLongShot()}
-      >
-        <IconLongShot size={15} />
-        {busy === 'longShot' ? t('chat.longShotCapturing') : t('sessionTools.longShot')}
-      </button>
+      {showTroubleshoot && (
+        <>
+          <button
+            className="account-menu-item"
+            role="menuitem"
+            disabled={busy !== null || session.isDraft}
+            title={
+              session.isDraft ? t('sessionTools.traceTitleDraft') : t('sessionTools.longShotTitle')
+            }
+            onClick={() => void doLongShot()}
+          >
+            <IconLongShot size={15} />
+            {busy === 'longShot' ? t('chat.longShotCapturing') : t('sessionTools.longShot')}
+          </button>
 
-      <button
-        className="account-menu-item"
-        role="menuitem"
-        disabled={busy !== null || session.isDraft}
-        title={session.isDraft ? t('sessionTools.traceTitleDraft') : t('sessionTools.traceTitle')}
-        onClick={() => void doTrace()}
-      >
-        <IconDownload size={15} />
-        {busy === 'trace' ? t('sessionTools.tracing') : t('sessionTools.trace')}
-      </button>
+          <button
+            className="account-menu-item"
+            role="menuitem"
+            disabled={busy !== null || session.isDraft}
+            title={session.isDraft ? t('sessionTools.traceTitleDraft') : t('sessionTools.traceTitle')}
+            onClick={() => void doTrace()}
+          >
+            <IconDownload size={15} />
+            {busy === 'trace' ? t('sessionTools.tracing') : t('sessionTools.trace')}
+          </button>
+        </>
+      )}
 
       <button
         className="account-menu-item"

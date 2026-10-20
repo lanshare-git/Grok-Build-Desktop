@@ -64,16 +64,28 @@ export async function exportSessionTrace(input: {
       cwd: input.cwd,
       timeout: 120_000
     })
+    const text = (stdout || stderr || '').trim()
     let path = ''
     try {
-      const parsed = JSON.parse(stdout.trim()) as { path?: string; output?: string }
-      path = parsed.path ?? parsed.output ?? ''
+      // grok trace --json 当前字段是 local_path；兼容 path / output
+      const parsed = JSON.parse(text) as {
+        path?: string
+        output?: string
+        local_path?: string
+        status?: string
+      }
+      path = parsed.local_path ?? parsed.path ?? parsed.output ?? ''
+      // 已导出但字段名再变时，仍从原文捞 .tar.gz 路径
+      if (!path && parsed.status === 'exported') {
+        const m = /([A-Za-z]:\\[^\s"]+\.tar\.gz|\/[^\s"]+\.tar\.gz)/.exec(text)
+        path = m?.[1] ?? ''
+      }
     } catch {
       /* 不是 JSON 就从文本里捞第一个像路径的片段 */
-      const m = /([A-Za-z]:\\[^\s"]+\.tar\.gz)/.exec(stdout || stderr || '')
+      const m = /([A-Za-z]:\\[^\s"]+\.tar\.gz|\/[^\s"]+\.tar\.gz)/.exec(text)
       path = m?.[1] ?? ''
     }
-    return { ok: Boolean(path), path, detail: (stdout || stderr || '').trim() }
+    return { ok: Boolean(path), path, detail: text }
   } catch (err) {
     return { ok: false, path: '', detail: (err as Error).message }
   }

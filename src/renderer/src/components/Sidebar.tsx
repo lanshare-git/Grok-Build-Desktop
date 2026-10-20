@@ -52,6 +52,8 @@ interface PreviewSpec {
 /** 卡片贴在侧栏右侧，与悬停行顶部对齐 */
 const PREVIEW_WIDTH = 300
 const PREVIEW_DELAY = 380
+/** 离开会话行 / 卡片后稍等再收：给鼠标跨过侧栏与卡片之间的空隙，去点「打开」 */
+const PREVIEW_HIDE_DELAY = 220
 
 export default function Sidebar(): JSX.Element {
   const sessions = useStore((s) => s.sessions)
@@ -87,9 +89,10 @@ export default function Sidebar(): JSX.Element {
   const [confirm, setConfirm] = useState<ConfirmSpec | null>(null)
   /** 删除会话时是否连磁盘一起删（初值来自设置中心的配置，默认 true；记住本次运行内的改动） */
   const [purgeOnDelete, setPurgeOnDelete] = useState(true)
-  /** 悬停详情卡（延迟弹出，鼠标移开即收） */
+  /** 悬停详情卡（延迟弹出；离开行/卡后短延迟再收，便于移入卡片点「打开」） */
   const [preview, setPreview] = useState<PreviewSpec | null>(null)
   const previewTimer = useRef<number | null>(null)
+  const previewHideTimer = useRef<number | null>(null)
   /** 左下角账号菜单的展开状态与锚点（头像行按钮） */
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const accountRef = useRef<HTMLButtonElement | null>(null)
@@ -100,7 +103,11 @@ export default function Sidebar(): JSX.Element {
   const [query, setQuery] = useState('')
   const [hits, setHits] = useState<SessionSearchHit[] | null>(null)
   const [searching, setSearching] = useState(false)
-  const [toolsFor, setToolsFor] = useState<{ session: SessionMeta; el: HTMLElement } | null>(null)
+  const [toolsFor, setToolsFor] = useState<{
+    session: SessionMeta
+    point: { x: number; y: number }
+    shift: boolean
+  } | null>(null)
   /** 工作目录行「更多」（改别名 / 移除） */
   const [wsToolsFor, setWsToolsFor] = useState<{ group: WorkspaceGroup; el: HTMLElement } | null>(
     null
@@ -182,19 +189,57 @@ export default function Sidebar(): JSX.Element {
           ? 'unread'
           : 'done'
 
-  const cancelPreview = (): void => {
+  const clearPreviewTimers = (): void => {
     if (previewTimer.current !== null) {
       window.clearTimeout(previewTimer.current)
       previewTimer.current = null
     }
+    if (previewHideTimer.current !== null) {
+      window.clearTimeout(previewHideTimer.current)
+      previewHideTimer.current = null
+    }
+  }
+
+  /** 立刻收起（点击会话 / 拖拽 / 开菜单等） */
+  const cancelPreview = (): void => {
+    clearPreviewTimers()
     setPreview(null)
+  }
+
+  /** 取消「即将收起」——鼠标回到会话行或进入详情卡时用 */
+  const keepPreview = (): void => {
+    if (previewHideTimer.current !== null) {
+      window.clearTimeout(previewHideTimer.current)
+      previewHideTimer.current = null
+    }
+  }
+
+  /** 离开交互区后短延迟再收，避免跨空隙时卡片先没了 */
+  const scheduleHidePreview = (): void => {
+    if (previewHideTimer.current !== null) window.clearTimeout(previewHideTimer.current)
+    previewHideTimer.current = window.setTimeout(() => {
+      previewHideTimer.current = null
+      if (previewTimer.current !== null) {
+        window.clearTimeout(previewTimer.current)
+        previewTimer.current = null
+      }
+      setPreview(null)
+    }, PREVIEW_HIDE_DELAY)
   }
 
   const schedulePreview = (
     id: string,
     el: HTMLElement
   ): void => {
-    cancelPreview()
+    keepPreview()
+    if (previewTimer.current !== null) {
+      window.clearTimeout(previewTimer.current)
+      previewTimer.current = null
+    }
+    // 已在显示同一会话时只续命，不重算位置、不重播延迟动画
+    if (preview?.sessionId === id) return
+    // 换到另一行：先收掉旧卡，再按延迟弹出新卡（与原先 cancel→schedule 一致）
+    if (preview) setPreview(null)
     const rect = el.getBoundingClientRect()
     // 左右都向内收，窗口很窄时也保证卡片完整可见
     const left = Math.min(rect.right + 10, window.innerWidth - PREVIEW_WIDTH - 12)
@@ -208,7 +253,7 @@ export default function Sidebar(): JSX.Element {
     window.addEventListener('resize', onResize)
     return () => {
       window.removeEventListener('resize', onResize)
-      if (previewTimer.current !== null) window.clearTimeout(previewTimer.current)
+      clearPreviewTimers()
     }
   }, [])
 
@@ -711,7 +756,7 @@ export default function Sidebar(): JSX.Element {
                             schedulePreview(session.id, e.currentTarget)
                           }
                         }}
-                        onMouseLeave={cancelPreview}
+                        onMouseLeave={scheduleHidePreview}
                         onClick={() => {
                           cancelPreview()
                           if (isRenaming) return
@@ -720,6 +765,17 @@ export default function Sidebar(): JSX.Element {
                             if (session.isDraft) useStore.getState().selectSession(session.id)
                             else void resumeSession(session.id, session.cwd)
                           }
+                        }}
+                        onContextMenu={(e) => {
+                          if (isRenaming) return
+                          e.preventDefault()
+                          e.stopPropagation()
+                          cancelPreview()
+                          setToolsFor({
+                            session,
+                            point: { x: e.clientX, y: e.clientY },
+                            shift: e.shiftKey
+                          })
                         }}
                       >
                         <div className="session-item-main">
@@ -756,11 +812,7 @@ export default function Sidebar(): JSX.Element {
                               <div className="session-item-title-row">
                               <div
                                 className="session-item-title"
-                                title={
-                                  session.customTitle
-                                    ? t('sidebar.sessionTitleCustom', { title, original: session.title })
-                                    : t('sidebar.sessionTitleAuto', { title })
-                                }
+                                /* 不挂原生 title：悬停详情卡已展示全名 + grok 原标题，再挂会叠两层重复 */
                                 onDoubleClick={(e) => {
                                   e.stopPropagation()
                                   startRenameSession(session)
@@ -783,7 +835,7 @@ export default function Sidebar(): JSX.Element {
                             )}
                           </div>
                         </div>
-                        {/* 改名中不渲染操作按钮：一来用不上，二来它占的宽度会挤窄输入框 */}
+                        {/* 改名中不渲染操作按钮：一来用不上，二来它占的宽度会挤窄输入框。更多操作改右键菜单 */}
                         {!isRenaming && (
                           <span className="session-actions">
                             <button
@@ -795,17 +847,6 @@ export default function Sidebar(): JSX.Element {
                               }}
                             >
                               <IconEdit size={13} />
-                            </button>
-                            <button
-                              className="icon-btn"
-                              title={t('sidebar.moreActions')}
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                cancelPreview()
-                                setToolsFor({ session, el: e.currentTarget })
-                              }}
-                            >
-                              <IconList size={14} />
                             </button>
                           </span>
                         )}
@@ -820,7 +861,12 @@ export default function Sidebar(): JSX.Element {
       </div>
 
       {preview && previewSession && (
-        <div className="session-preview" style={{ top: preview.top, left: preview.left }}>
+        <div
+          className="session-preview"
+          style={{ top: preview.top, left: preview.left }}
+          onMouseEnter={keepPreview}
+          onMouseLeave={scheduleHidePreview}
+        >
           <div className="session-preview-head">
             <span className="session-preview-title">{sessionDisplayTitle(previewSession, locale)}</span>
             {previewStatus !== 'done' && (
@@ -910,7 +956,8 @@ export default function Sidebar(): JSX.Element {
       {toolsFor && (
         <SessionToolsMenu
           session={toolsFor.session}
-          anchor={toolsFor.el}
+          point={toolsFor.point}
+          openedWithShift={toolsFor.shift}
           onClose={() => setToolsFor(null)}
           /* 可搬运的目标 = 其它工作目录（排除它自己所在的那个） */
           moveTargets={groups

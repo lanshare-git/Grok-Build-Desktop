@@ -33,11 +33,7 @@ export const sidebar: typeof zh = {
   tagUnread: '未読',
   renameInputTitle:
     '直接編集できます。空欄または元のタイトルに戻すと、grok の自動タイトルに再び従います',
-  sessionTitleCustom: (vars: { title: string; original: string }) =>
-    `${vars.title}\n（ダブルクリックで改名。元の名前：${vars.original}）`,
-  sessionTitleAuto: (vars: { title: string }) => `${vars.title}\n（ダブルクリックで改名）`,
-  renameSession: '名前を変更（タイトルのダブルクリックでも可）',
-  moreActions: 'その他（エクスポート / アンロード / 削除）',
+  renameSession: '名前を変更',
   deleteSession: 'セッションを削除',
   unknownError: '不明なエラー',
 

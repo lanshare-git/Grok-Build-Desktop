@@ -27,11 +27,7 @@ export const sidebar = {
   tagPending: '待响应',
   tagUnread: '未读',
   renameInputTitle: '直接编辑；留空或改回原标题，则恢复跟随 grok 的自动标题',
-  sessionTitleCustom: (vars: { title: string; original: string }) =>
-    `${vars.title}\n（双击改名；原名：${vars.original}）`,
-  sessionTitleAuto: (vars: { title: string }) => `${vars.title}\n（双击改名）`,
-  renameSession: '重命名（双击标题也行）',
-  moreActions: '更多（导出 / 卸载 / 删除）',
+  renameSession: '重命名',
   deleteSession: '删除会话',
   unknownError: '未知错误',
 

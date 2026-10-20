@@ -33,11 +33,7 @@ export const sidebar: typeof zh = {
   tagUnread: 'Unread',
   renameInputTitle:
     "Edit directly; leave empty or restore the original title to follow grok's automatic title again",
-  sessionTitleCustom: (vars: { title: string; original: string }) =>
-    `${vars.title}\n(Double-click to rename; original: ${vars.original})`,
-  sessionTitleAuto: (vars: { title: string }) => `${vars.title}\n(Double-click to rename)`,
-  renameSession: 'Rename (or double-click the title)',
-  moreActions: 'More (export / unload / delete)',
+  renameSession: 'Rename',
   deleteSession: 'Delete session',
   unknownError: 'Unknown error',
 
