@@ -34,7 +34,6 @@ import {
   IconClose,
   IconEdit,
   IconFolder,
-  IconList,
   IconPlus,
   IconSearch
 } from './Icons'
@@ -109,9 +108,10 @@ export default function Sidebar(): JSX.Element {
     shift: boolean
   } | null>(null)
   /** 工作目录行「更多」（改别名 / 移除） */
-  const [wsToolsFor, setWsToolsFor] = useState<{ group: WorkspaceGroup; el: HTMLElement } | null>(
-    null
-  )
+  const [wsToolsFor, setWsToolsFor] = useState<{
+    group: WorkspaceGroup
+    point: { x: number; y: number }
+  } | null>(null)
   /**
    * 会话拖拽搬移：正在拖的会话 id + 当前悬停的目标分组 key。
    * 目标目录由 group.path 决定，落盘目录的搬运在主进程做（见 actions.moveSessionToWorkspace）。
@@ -624,6 +624,13 @@ export default function Sidebar(): JSX.Element {
                 onClick={() => {
                   if (!isEditing) toggleGroup(group.key)
                 }}
+                onContextMenu={(e) => {
+                  // 聊天组没有「改别名 / 移除」；改名中也不弹菜单
+                  if (group.isHome || isEditing) return
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setWsToolsFor({ group, point: { x: e.clientX, y: e.clientY } })
+                }}
                 title={
                   group.isHome
                     ? t('sidebar.homeGroupTitle', { path: group.path })
@@ -663,8 +670,8 @@ export default function Sidebar(): JSX.Element {
                   </span>
                 )}
 
-                {/* 操作区先于计数：按钮区宽度固定（见 .ws-actions），计数永远在最右，
-                    各组按钮数不同也不会把计数挤到不同位置 */}
+                {/* 操作区先于计数：按钮区宽度固定（见 .ws-actions），计数永远在最右。
+                    改别名/移除改右键，行上只留 + */}
                 <span className="ws-actions">
                   {group.isHome ? (
                     <button
@@ -678,28 +685,16 @@ export default function Sidebar(): JSX.Element {
                       <IconPlus size={12} />
                     </button>
                   ) : (
-                    <>
-                      <button
-                        className="icon-btn"
-                        title={t('sidebar.newTaskInDir', { path: group.path })}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          void newSession(group.path)
-                        }}
-                      >
-                        <IconPlus size={12} />
-                      </button>
-                      <button
-                        className="icon-btn"
-                        title="更多（改别名 / 移除）"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setWsToolsFor({ group, el: e.currentTarget })
-                        }}
-                      >
-                        <IconList size={14} />
-                      </button>
-                    </>
+                    <button
+                      className="icon-btn"
+                      title={t('sidebar.newTaskInDir', { path: group.path })}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        void newSession(group.path)
+                      }}
+                    >
+                      <IconPlus size={12} />
+                    </button>
                   )}
                 </span>
 
@@ -979,7 +974,7 @@ export default function Sidebar(): JSX.Element {
       {wsToolsFor && (
         <WorkspaceToolsMenu
           group={wsToolsFor.group}
-          anchor={wsToolsFor.el}
+          point={wsToolsFor.point}
           onClose={() => setWsToolsFor(null)}
           onRequestRename={() => startRename(wsToolsFor.group)}
           onRequestRemove={() => handleRemoveGroup(wsToolsFor.group)}

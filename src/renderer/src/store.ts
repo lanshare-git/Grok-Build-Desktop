@@ -26,6 +26,7 @@ import type {
   WorkspaceMeta
 } from '@shared/types'
 import { densityExpandsByDefault } from '@shared/types'
+import { stripAgentNoise } from '@shared/agent-noise'
 import { resolveLocale, t as tShared, type Locale } from '@shared/i18n'
 import { mostRecentWorkspaceCwd, normalizeDir, toolCallOutput } from './utils'
 import type { AppVersionInfo } from '@shared/api'
@@ -447,8 +448,14 @@ function upsertPlan(items: ChatItem[], entries: PlanEntry[], at = Date.now()): C
 function reduceUpdate(items: ChatItem[], update: SessionUpdateEnvelope): ChatItem[] {
   const at = eventAt(update)
   switch (update.sessionUpdate) {
-    case 'user_message_chunk':
-      return appendText(items, 'user', update.content?.text, at)
+    case 'user_message_chunk': {
+      // agent 注入的 <system-reminder> 等会以 user_message_chunk 下发，不能画成用户气泡
+      const raw = update.content?.text
+      if (!raw) return items
+      const text = stripAgentNoise(raw)
+      if (!text) return items
+      return appendText(items, 'user', text, at)
+    }
     case 'agent_message_chunk': {
       const text = update.content?.text
       const media = mediaFromUpdate(update)
@@ -1880,7 +1887,15 @@ advanceReplayProgress: (sessionId, applied) =>
           .filter((x) => !x.isDraft)
           .map((x) => ({
             ...x,
-            items: x.id === s.activeId ? x.items.slice(-120) : []
+            // 落盘时剥掉 streaming：否则异常收尾的会话重启后末尾永久闪生成光标
+            items:
+              x.id === s.activeId
+                ? x.items.slice(-120).map((it) =>
+                    it.kind === 'assistant' || it.kind === 'thinking'
+                      ? { ...it, streaming: false }
+                      : it
+                  )
+                : []
           }))
         const activeId =
           s.activeId && sessions.some((x) => x.id === s.activeId)

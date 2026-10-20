@@ -6,6 +6,7 @@ import { captureLongShotFromElement } from '../long-shot'
 import { useStore } from '../store'
 import { sessionDisplayTitle } from '../utils'
 import type { ChatItem, ImageAttachment, MediaAttachment } from '@shared/types'
+import { isAgentNoiseOnly } from '@shared/agent-noise'
 
 type ToolItem = Extract<ChatItem, { kind: 'tool' }>
 import Markdown from './Markdown'
@@ -521,6 +522,13 @@ export default function ChatView(): JSX.Element {
         {items.map((item) => {
           switch (item.kind) {
             case 'user':
+              // agent 注入的 system-reminder（后台任务完成等）不是用户发的，不画气泡
+              if (
+                isAgentNoiseOnly(item.text) &&
+                !(item.images && item.images.length > 0)
+              ) {
+                return null
+              }
               if (editingId === item.id) {
                 return (
                   <UserEditBox
@@ -573,11 +581,13 @@ export default function ChatView(): JSX.Element {
               )
             case 'assistant': {
               const media = item.media && item.media.length > 0 ? item.media : extractEmbeddedMedia(item.text)
+              // 光标只在「本会话正在跑」时显示。turn 没收尾时 streaming 会残留并被
+              // persist 回来，已完成会话末尾就会永久闪黑块（本会话 1819895 就是此状）。
               return (
                 <div key={item.id} className="msg msg-assistant" data-long-shot-target="">
                   <Markdown text={item.text} />
                   {media.length > 0 && <MediaView media={media} />}
-                  {item.streaming && <span className="caret" />}
+                  {item.streaming && running && <span className="caret" />}
                 </div>
               )
             }

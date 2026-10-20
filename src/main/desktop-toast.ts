@@ -6,12 +6,16 @@
  * 用户可直接点允许/拒绝，无需把主窗口唤回来。
  */
 
-import { BrowserWindow, screen } from 'electron'
+import { app, BrowserWindow, screen } from 'electron'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import type { MessageKey } from '../shared/i18n'
 import { localizePermissionOption, isDenyPermissionOption } from '../shared/permission-labels'
 import { t } from './i18n'
+
+/** 浮窗抬头品牌名（对齐 Codex 浮窗的「ChatGPT」） */
+const BRAND_NAME = 'Grok Build'
 
 export interface DesktopToastOption {
   optionId: string
@@ -32,11 +36,13 @@ interface OpenToast {
 }
 
 const MARGIN = 12
-/** 卡片内容宽；窗外再留 SHADOW_PAD 给投影，避免被透明窗裁成「贴平面」 */
+/** 卡片内容宽；窗外再留 SHADOW_PAD 给投影，避免被透明窗裁掉 */
 const CARD_WIDTH = 420
-const SHADOW_PAD = 14
+const SHADOW_PAD = 10
 const WIDTH = CARD_WIDTH + SHADOW_PAD * 2
 const openToasts = new Map<number, OpenToast>()
+
+let cachedLogoDataUri: string | null = null
 
 function escapeHtml(s: string): string {
   return s
@@ -51,6 +57,19 @@ function toastPreloadPath(): string {
   return join(__dirname, '../preload/toast.js')
 }
 
+/** 与托盘/窗口同一条 build/ 通道；读成 data URI 嵌进浮窗（CSP 仅放行 img-src data:） */
+function toastLogoDataUri(): string {
+  if (cachedLogoDataUri) return cachedLogoDataUri
+  try {
+    const dir = app.isPackaged ? join(process.resourcesPath, 'build') : join(__dirname, '../../build')
+    const buf = readFileSync(join(dir, 'icon.png'))
+    cachedLogoDataUri = `data:image/png;base64,${buf.toString('base64')}`
+  } catch {
+    cachedLogoDataUri = ''
+  }
+  return cachedLogoDataUri
+}
+
 function buildHtml(payload: DesktopPermToast): string {
   const badge = escapeHtml(t('prompts.perm.badge'))
   const title = escapeHtml(t('prompts.perm.title'))
@@ -60,6 +79,11 @@ function buildHtml(payload: DesktopPermToast): string {
   const openApp = escapeHtml(t('prompts.toast.openApp'))
   const disableToasts = escapeHtml(t('settings.general.desktopPermToast.disableFromToast'))
   const closeLabel = escapeHtml(t('common.close'))
+  const brand = escapeHtml(BRAND_NAME)
+  const logo = toastLogoDataUri()
+  const logoHtml = logo
+    ? `<img class="logo" src="${logo}" alt="" width="18" height="18" draggable="false" />`
+    : ''
 
   const hasDeny = payload.options.some((o) => isDenyPermissionOption(o))
   const buttons = [
@@ -81,16 +105,15 @@ function buildHtml(payload: DesktopPermToast): string {
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8" />
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:" />
 <title>${title}</title>
 <style>
   :root {
     color-scheme: light;
-    /* 暖色抬起面：相对主窗纯白 #fff / 浅灰底，一眼能分出「浮层」 */
-    --bg: #fffbf5;
+    --bg: #ffffff;
     --text: #1a1d23;
     --muted: #6b7280;
-    --line: #ead9c0;
+    --line: #e5e7eb;
     --warn: #b45309;
     --warn-soft: #fdf4e7;
     --ink: #1f2937;
@@ -109,24 +132,54 @@ function buildHtml(payload: DesktopPermToast): string {
   }
   .card {
     margin: 0;
-    padding: 12px 12px 10px;
+    padding: 14px 14px 12px;
     width: ${CARD_WIDTH}px;
     background: var(--bg);
     border: 1px solid var(--line);
-    border-left: 3px solid var(--warn);
-    border-radius: 12px;
-    /* 多层投影：近处轮廓 + 中距抬起 + 远处落影，避免白底贴白底 */
-    box-shadow:
-      0 0 0 1px rgba(180, 83, 9, 0.06),
-      0 2px 4px rgba(16, 24, 40, 0.06),
-      0 12px 28px rgba(16, 24, 40, 0.18),
-      0 28px 56px rgba(16, 24, 40, 0.14);
+    border-radius: 10px;
+    /* 对齐 Codex：一圈克制软阴影，不要多层重影 */
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.08);
   }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .logo {
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    display: block;
+  }
+  .brand-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text);
+    letter-spacing: -0.01em;
+  }
+  .close {
+    flex: 0 0 auto;
+    width: 24px;
+    height: 24px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+  }
+  .close:hover { background: #f3f4f6; color: var(--text); }
   .head {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
   }
   .badge {
     flex: 0 0 auto;
@@ -143,24 +196,10 @@ function buildHtml(payload: DesktopPermToast): string {
     font-weight: 600;
     font-size: 13px;
   }
-  .close {
-    flex: 0 0 auto;
-    width: 24px;
-    height: 24px;
-    border: none;
-    border-radius: 6px;
-    background: transparent;
-    color: var(--muted);
-    font-size: 16px;
-    line-height: 1;
-    cursor: pointer;
-    padding: 0;
-  }
-  .close:hover { background: #f3f4f6; color: var(--text); }
   .sub {
     color: var(--muted);
     font-size: 12.5px;
-    margin-bottom: 10px;
+    margin-bottom: 12px;
     word-break: break-word;
     display: -webkit-box;
     -webkit-line-clamp: 3;
@@ -195,13 +234,13 @@ function buildHtml(payload: DesktopPermToast): string {
   .btn.primary:hover { filter: brightness(1.08); }
   .btn.ghost {
     background: #fff;
-    border-color: #e5e7eb;
+    border-color: var(--line);
     color: var(--text);
   }
   .btn.ghost:hover { background: #f3f4f6; }
   .btn:disabled { opacity: .55; cursor: default; }
   .footer {
-    margin-top: 8px;
+    margin-top: 10px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -223,10 +262,14 @@ function buildHtml(payload: DesktopPermToast): string {
 </head>
 <body>
   <div class="card" id="card">
+    <div class="brand">
+      ${logoHtml}
+      <span class="brand-name">${brand}</span>
+      <button type="button" class="close" id="closeBtn" title="${closeLabel}" aria-label="${closeLabel}">×</button>
+    </div>
     <div class="head">
       <span class="badge">${badge}</span>
       <span class="title">${title}</span>
-      <button type="button" class="close" id="closeBtn" title="${closeLabel}" aria-label="${closeLabel}">×</button>
     </div>
     <div class="sub">${wantPre}<strong>${tool}</strong>${wantPost}</div>
     <div class="actions" id="actions">${buttons}</div>

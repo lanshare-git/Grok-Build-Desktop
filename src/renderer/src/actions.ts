@@ -329,6 +329,11 @@ export async function resumeSession(sessionId: string, cwd: string): Promise<voi
     // 已在 agent 进程内：本地历史就是最新的，无需重放。
     // 只同步一次权限模式（换过模式后重进会话要保持一致）。
     await applyPermissionModeToSession(sessionId)
+    // 回合没收尾时会残留 streaming=true（生成光标永久闪烁）。已加载路径
+    // 不走 finishSessionReplay，这里补一次封口；正在跑的会话不能封。
+    if (!useStore.getState().running.includes(sessionId)) {
+      useStore.getState().finalizeSession(sessionId)
+    }
     return
   }
 

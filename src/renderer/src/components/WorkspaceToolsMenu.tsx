@@ -5,18 +5,19 @@ import { useT } from '../i18n'
 import { IconEdit, IconTrash } from './Icons'
 
 /**
- * 工作目录行的「更多」菜单：改别名 / 从列表移除。
- * 新建任务仍用行上的 +；菜单定位与 SessionToolsMenu 一致（fixed，不被侧栏裁剪）。
+ * 工作目录行的右键菜单：改别名 / 从列表移除。
+ * 新建任务仍用行上的 +；定位用鼠标坐标（position:fixed），避免被侧栏裁剪。
  */
 export default function WorkspaceToolsMenu({
   group,
-  anchor,
+  point,
   onClose,
   onRequestRename,
   onRequestRemove
 }: {
   group: WorkspaceGroup
-  anchor: HTMLElement | null
+  /** 右键落点（viewport 坐标） */
+  point: { x: number; y: number }
   onClose: () => void
   onRequestRename: () => void
   onRequestRemove: () => void
@@ -26,13 +27,11 @@ export default function WorkspaceToolsMenu({
   const t = useT()
 
   useLayoutEffect(() => {
-    if (!anchor) return
     const place = (): void => {
-      const r = anchor.getBoundingClientRect()
       const width = 200
       setPos({
-        top: Math.min(r.bottom + 4, Math.max(12, window.innerHeight - 160)),
-        left: Math.min(r.right + 6, window.innerWidth - width - 12)
+        top: Math.min(point.y, Math.max(12, window.innerHeight - 160)),
+        left: Math.min(point.x, window.innerWidth - width - 12)
       })
     }
     place()
@@ -42,12 +41,11 @@ export default function WorkspaceToolsMenu({
       window.removeEventListener('resize', place)
       window.removeEventListener('scroll', place, true)
     }
-  }, [anchor])
+  }, [point.x, point.y])
 
   useEffect(() => {
     const onDown = (e: MouseEvent): void => {
       if (menuRef.current?.contains(e.target as Node)) return
-      if (anchor?.contains(e.target as Node)) return
       onClose()
     }
     const onKey = (e: KeyboardEvent): void => {
@@ -59,7 +57,7 @@ export default function WorkspaceToolsMenu({
       document.removeEventListener('mousedown', onDown)
       document.removeEventListener('keydown', onKey)
     }
-  }, [anchor, onClose])
+  }, [onClose])
 
   if (!pos) return null
 

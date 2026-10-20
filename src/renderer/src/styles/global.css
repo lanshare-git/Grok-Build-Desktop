@@ -262,9 +262,9 @@ pre {
   justify-content: flex-end;
   gap: 1px;
   flex-shrink: 0;
-  /* 固定预留两个按钮的宽度（+ / 更多；聊天组只有一个），
+  /* 固定预留一个 + 按钮宽度（改别名/移除改右键）；
      若按内容收缩，右侧计数会被挤到不同位置、竖向对不齐 */
-  width: 46px;
+  width: 24px;
   opacity: 0;
   transition: opacity 0.12s ease;
 }
