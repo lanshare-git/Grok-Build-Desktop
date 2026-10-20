@@ -746,6 +746,11 @@ interface AppState {
   /** 记住模型/推理强度选项目录（来自 session/new 或 config_option_update） */
   rememberConfigCatalog(options: ConfigOption[] | undefined): void
   /**
+   * 冷启动播种目录（主进程从 grok 磁盘缓存合成）：只合并不动 preferred，
+   * 避免把「猜的默认值」当成用户意愿在首发时推给 agent；真实选项到达后按 id 覆盖。
+   */
+  seedConfigCatalog(options: ConfigOption[]): void
+  /**
    * 草稿上改模型/推理强度：只写 pending* + preferred，首发 newSession 时带上。
    * 真实会话请走 actions.changeConfigOption（发 ACP）。
    */
@@ -1388,6 +1393,12 @@ export const useStore = create<AppState>()(
             preferredModel: s.preferredModel ?? model?.currentValue ?? null,
             preferredEffort: s.preferredEffort ?? effort?.currentValue ?? null
           }
+        }),
+
+      seedConfigCatalog: (options) =>
+        set((s) => {
+          const next = mergeConfigCatalog(s.configOptionCatalog, options)
+          return next === s.configOptionCatalog ? {} : { configOptionCatalog: next }
         }),
 
       setDraftConfig: (sessionId, configId, value) =>

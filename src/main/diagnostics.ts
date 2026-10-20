@@ -11,7 +11,7 @@ import { resolveGrokBinary, resolveGrokHome } from './acp/service'
 import { readConfig } from './config'
 import { t } from './i18n'
 import { checkProxy, probeEndpointDirect } from './proxy'
-import type { DiagnosticCheck, DiagnosticsReport } from '../shared/types'
+import type { ConfigOption, DiagnosticCheck, DiagnosticsReport } from '../shared/types'
 
 function safeReadJson<T>(path: string): T | null {
   try {
@@ -23,6 +23,99 @@ function safeReadJson<T>(path: string): T | null {
 }
 
 const MODEL_ENDPOINT = 'https://cli-chat-proxy.grok.com/v1/models'
+
+/**
+ * 冷启动模型目录种子：读 grok 落盘的 models_cache.json（+ settings_cache.json 的
+ * default_model），合成 model / reasoning_effort 两个 ConfigOption。
+ *
+ * 用途：首次使用（或清空应用数据后）还没有任何会话时，真实选项要等第一次
+ * session/new 才由 agent 下发，草稿 Header 的模型下拉无数据可画。这份种子只填
+ * 这个空窗期 —— 真实 configOptions 到达后按 id 覆盖（mergeConfigCatalog），
+ * 不会被种子锁死。缓存不存在或结构不符时返回空数组（= 维持原行为）。
+ */
+export function readModelConfigSeed(): ConfigOption[] {
+  const grokHome = resolveGrokHome()
+  interface EffortEntry {
+    id?: string
+    value?: string
+    label?: string
+    description?: string
+    default?: boolean
+  }
+  interface ModelEntry {
+    info?: {
+      id?: string
+      name?: string
+      hidden?: boolean
+      supported_in_api?: boolean
+      reasoning_effort?: string | null
+      reasoning_efforts?: EffortEntry[]
+    }
+  }
+  const cache = safeReadJson<{ models?: Record<string, ModelEntry> }>(
+    join(grokHome, 'models_cache.json')
+  )
+  const models = cache?.models
+  if (!models) return []
+  const visible = Object.values(models).filter((m) => {
+    const info = m?.info
+    if (!info?.id) return false
+    return info.hidden !== true && info.supported_in_api !== false
+  })
+  if (visible.length === 0) return []
+
+  // 默认模型：settings_cache.json 的 settings.default_model（payload 是二次编码的 JSON 字符串）
+  let defaultModel: string | null = null
+  const settingsCache = safeReadJson<{ payload?: string }>(join(grokHome, 'settings_cache.json'))
+  try {
+    const payload = settingsCache?.payload
+      ? (JSON.parse(settingsCache.payload) as { settings?: { default_model?: unknown } })
+      : null
+    const dm = payload?.settings?.default_model
+    if (typeof dm === 'string' && dm) defaultModel = dm
+  } catch {
+    /* 忽略：退回第一个可见模型（models_cache 按新到旧排列） */
+  }
+  const current = visible.find((m) => m.info?.id === defaultModel) ?? visible[0]
+  const currentId = current.info?.id
+  if (!currentId) return []
+
+  const seed: ConfigOption[] = [
+    {
+      id: 'model',
+      configId: 'model',
+      name: 'Model',
+      category: 'model',
+      currentValue: currentId,
+      options: visible.map((m) => ({
+        value: m.info?.id ?? '',
+        name: m.info?.name ?? m.info?.id
+      }))
+    }
+  ]
+
+  // 推理强度：取当前模型自己声明的档位（不同模型档位可能不同，如 4.5 没有 xhigh）
+  const efforts = current.info?.reasoning_efforts ?? []
+  const effortOptions = efforts
+    .map((e) => ({
+      value: e.value ?? e.id ?? '',
+      name: e.label ?? e.value ?? e.id,
+      description: e.description
+    }))
+    .filter((o) => o.value)
+  if (effortOptions.length > 0) {
+    seed.push({
+      id: 'reasoning_effort',
+      configId: 'reasoning_effort',
+      name: 'Reasoning Effort',
+      category: 'thought_level',
+      currentValue:
+        efforts.find((e) => e.default)?.value ?? current.info?.reasoning_effort ?? undefined,
+      options: effortOptions
+    })
+  }
+  return seed
+}
 
 export async function runDiagnostics(): Promise<DiagnosticsReport> {
   const checks: DiagnosticCheck[] = []

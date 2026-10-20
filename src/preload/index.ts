@@ -50,6 +50,7 @@ const api: GrokDesktopApi = {
     ipcRenderer.invoke(CH.agentQuestionResponse, { requestId, answers }),
 
   diagnostics: () => ipcRenderer.invoke(CH.diagnosticsRun),
+  modelConfigSeed: () => ipcRenderer.invoke(CH.modelConfigSeed),
   pickDirectory: () => ipcRenderer.invoke(CH.pickDirectory),
   appInfo: () => ipcRenderer.invoke(CH.appInfo),
   appVersion: () => ipcRenderer.invoke(CH.appVersion),

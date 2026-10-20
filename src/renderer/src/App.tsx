@@ -190,6 +190,17 @@ export default function App(): JSX.Element {
         const startupCwd =
           mostRecentWorkspaceCwd(st.sessions) || st.cwd || info.defaultCwd
         st.setCwd(startupCwd)
+        // 冷启动播种模型目录：从来没有过会话时 configOptionCatalog 是空的，
+        // 草稿 Header 画不出模型/推理强度下拉（真实选项要等第一次 session/new）。
+        // 用 grok 磁盘缓存合成一份顶上；真实选项到达后按 id 覆盖，不会被种子锁死。
+        try {
+          if (!st.configOptionCatalog.some((o) => (o.configId ?? o.id) === 'model')) {
+            const seed = await window.grok.modelConfigSeed()
+            if (seed.length > 0) useStore.getState().seedConfigCatalog(seed)
+          }
+        } catch {
+          /* 种子只是兜底，失败维持原行为（发首条消息后下拉出现） */
+        }
         bootstrapBlankSession(startupCwd)
       } catch {
         /* 忽略：后续 connect 会给出更具体的错误 */

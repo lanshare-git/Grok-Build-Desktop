@@ -16,6 +16,8 @@ export const CH = {
   agentStop: 'agent:stop',
 
   diagnosticsRun: 'diagnostics:run',
+  /** 冷启动模型目录种子（读 grok 磁盘缓存合成 model/reasoning_effort 选项，供无会话时的草稿下拉） */
+  modelConfigSeed: 'grok:model-config-seed',
   proxyGet: 'proxy:get',
   proxySet: 'proxy:set',
   proxyDetect: 'proxy:detect',

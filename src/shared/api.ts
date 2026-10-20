@@ -8,6 +8,7 @@ import type {
   TurnCompleteEvent,
   BillingQuota,
   CloseAction,
+  ConfigOption,
   ConnectionEvent,
   DesktopPermToastMode,
   DiagnosticsReport,
@@ -85,6 +86,12 @@ export interface GrokDesktopApi {
 
   /* 环境 */
   diagnostics(): Promise<DiagnosticsReport>
+  /**
+   * 冷启动模型目录种子：从 grok 磁盘缓存（models_cache.json + settings_cache.json）
+   * 合成 model / reasoning_effort 两个 ConfigOption，供「还没有任何会话」时的草稿下拉使用。
+   * 缓存不存在时返回空数组；真实 configOptions 到达后按 id 覆盖，不会被种子锁死。
+   */
+  modelConfigSeed(): Promise<ConfigOption[]>
   pickDirectory(): Promise<string | null>
   appInfo(): Promise<AppInfo>
   /** 应用自身版本（package.json version + 打包时刻 + 运行时版本） */

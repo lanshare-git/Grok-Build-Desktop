@@ -9,7 +9,7 @@ import { CH } from '../shared/channels'
 import { AgentService, resolveGrokBinary, resolveGrokHome } from './acp/service'
 import { resolveAssetUriAsync } from './assets'
 import { readConfig, writeConfig } from './config'
-import { runDiagnostics } from './diagnostics'
+import { readModelConfigSeed, runDiagnostics } from './diagnostics'
 import { detectProxy } from './proxy'
 import { encodeSessionDir, readSessionActivity } from './session-activity'
 import { deleteSessionData } from './session-delete'
@@ -197,6 +197,7 @@ export function registerIpc(service: AgentService): void {
 
   /* ---------- 环境 ---------- */
   ipcMain.handle(CH.diagnosticsRun, async () => runDiagnostics())
+  ipcMain.handle(CH.modelConfigSeed, () => readModelConfigSeed())
 
   /* ---------- 代理 ---------- */
   ipcMain.handle(CH.proxyGet, (): ProxySettings => readConfig())
