@@ -53,13 +53,24 @@ export const mainErrors = {
     worktreeNoPath: 'grok 未返回 worktree 路径',
     worktreeRemoved: '已删除 worktree。',
     loginFinished: '登录流程已结束。',
-    loginTimeout: '登录等待超时（5 分钟内未完成浏览器授权）。请重试，或在终端执行 grok login。'
+    loginTimeout: '登录等待超时（5 分钟内未完成浏览器授权）。请重试，或在终端执行 grok login。',
+    logoutFailed: '退出登录失败',
+    serverNameRequired: '服务器名称不能为空。',
+    remoteUrlRequired: '远程 MCP 服务器需要填写连接地址（URL）。',
+    stdioCommandRequired: 'stdio 服务器需要填写启动命令。',
+    diagDoneNoOutput: '诊断完成，无输出。'
   },
   exportMarkdown: {
-    dialogTitle: '导出会话为 Markdown'
+    dialogTitle: '导出会话为 Markdown',
+    nothingToExport: '该会话在磁盘上没有可导出的内容（可能尚未落盘）。',
+    metaSessionId: (vars: { id: string }) => `- 会话 ID：${vars.id}`,
+    metaCwd: (vars: { cwd: string }) => `- 工作目录：${vars.cwd}`,
+    roleMe: '我',
+    footerLocal: (vars: { at: string }) => `导出于 ${vars.at}（客户端兜底渲染，非 grok export 原样输出）`
   },
   longShot: {
-    dialogTitle: '保存会话长截屏'
+    dialogTitle: '保存会话长截屏',
+    windowUnavailable: '窗口不可用'
   },
   /** acp/service.ts 冒泡到连接状态与 prompt 错误的用户可见串 */
   service: {
@@ -68,7 +79,18 @@ export const mainErrors = {
     exited: (vars: { code: string }) => `agent 进程已退出（code=${vars.code}）`,
     ready: 'agent 已就绪',
     stopped: '已停止',
-    emptyContent: '消息内容为空'
+    emptyContent: '消息内容为空',
+    requestTimeout: (vars: { method: string }) => `请求超时：${vars.method}`,
+    alreadyRunning: 'agent 客户端已在运行',
+    agentNotReady: 'agent 进程未就绪，无法发送请求',
+    methodFailed: (vars: { method: string; detail: string }) => `${vars.method} 失败：${vars.detail}`
+  },
+  /** proxy.ts 代理/端点探测的 detail（嵌进诊断面板 detail 显示） */
+  proxy: {
+    unparsable: (vars: { url: string }) => `无法解析代理地址：${vars.url}`,
+    reachable: (vars: { addr: string }) => `${vars.addr} 可连接`,
+    unreachable: (vars: { addr: string }) => `${vars.addr} 无法连接`,
+    timeout: '连接超时'
   },
   /** billing.ts 额度读取失败原因（AccountMenu 额度行显示） */
   billing: {

@@ -7,6 +7,8 @@
 
 import { connect } from 'node:net'
 
+import { t } from './i18n'
+
 export interface ProxyCandidate {
   url: string
   label: string
@@ -58,11 +60,12 @@ export function probeTcp(host: string, port: number, timeoutMs = 1200): Promise<
 /** 检查指定代理端口是否可达 */
 export async function checkProxy(url: string): Promise<{ ok: boolean; detail: string }> {
   const parsed = parseProxy(url)
-  if (!parsed) return { ok: false, detail: `无法解析代理地址：${url}` }
+  if (!parsed) return { ok: false, detail: t('mainErrors.proxy.unparsable', { url }) }
   const ok = await probeTcp(parsed.host, parsed.port)
+  const addr = `${parsed.host}:${parsed.port}`
   return {
     ok,
-    detail: ok ? `${parsed.host}:${parsed.port} 可连接` : `${parsed.host}:${parsed.port} 无法连接`
+    detail: ok ? t('mainErrors.proxy.reachable', { addr }) : t('mainErrors.proxy.unreachable', { addr })
   }
 }
 
@@ -91,7 +94,7 @@ export async function probeEndpointDirect(
     const res = await fetch(url, { method: 'GET', signal: controller.signal })
     return { ok: true, detail: `HTTP ${res.status}` }
   } catch (err) {
-    const msg = (err as Error).name === 'AbortError' ? '连接超时' : (err as Error).message
+    const msg = (err as Error).name === 'AbortError' ? t('mainErrors.proxy.timeout') : (err as Error).message
     return { ok: false, detail: msg }
   } finally {
     clearTimeout(timer)

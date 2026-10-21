@@ -23,6 +23,8 @@ export const tool: typeof zh = {
     input: 'Input',
     output: 'Output'
   },
+  /** Fallback tool-card title when the agent sends no title (upsertTool) */
+  fallbackTitle: 'Tool call',
   /** Client-side fallback interruption reasons (written by markStuckTools, rendered verbatim by ToolCallCard) */
   interruptTurn: 'The turn has ended without a tool result reaching the client (it may have been interrupted or timed out on the agent side).',
   interruptReplay: 'This call was left unfinished by the previous process; there will be no result after the restart.'

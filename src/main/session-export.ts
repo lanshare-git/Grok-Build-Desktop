@@ -9,6 +9,7 @@
  */
 
 import { runGrokCli } from './grok-cli'
+import { t } from './i18n'
 import { readSessionMessages } from './session-search'
 
 export interface ExportMarkdownResult {
@@ -44,13 +45,24 @@ export async function exportSessionMarkdown(input: {
 
   const messages = await readSessionMessages(input.cwd, input.sessionId)
   if (messages.length === 0) {
-    throw new Error('该会话在磁盘上没有可导出的内容（可能尚未落盘）。')
+    throw new Error(t('mainErrors.exportMarkdown.nothingToExport'))
   }
-  const lines: string[] = [`# ${input.title}`, '', `- 会话 ID：${input.sessionId}`, `- 工作目录：${input.cwd}`, '']
+  const lines: string[] = [
+    `# ${input.title}`,
+    '',
+    t('mainErrors.exportMarkdown.metaSessionId', { id: input.sessionId }),
+    t('mainErrors.exportMarkdown.metaCwd', { cwd: input.cwd }),
+    ''
+  ]
   for (const m of messages) {
-    lines.push(m.role === 'user' ? '## 我' : '## Grok', '', m.text, '')
+    lines.push(
+      m.role === 'user' ? `## ${t('mainErrors.exportMarkdown.roleMe')}` : '## Grok',
+      '',
+      m.text,
+      ''
+    )
   }
-  lines.push(`> 导出于 ${fmtDate(Date.now())}（客户端兜底渲染，非 grok export 原样输出）`, '')
+  lines.push(`> ${t('mainErrors.exportMarkdown.footerLocal', { at: fmtDate(Date.now()) })}`, '')
   return { markdown: lines.join('\n'), source: 'local' }
 }
 

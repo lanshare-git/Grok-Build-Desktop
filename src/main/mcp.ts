@@ -14,6 +14,7 @@ import { promisify } from 'node:util'
 
 import { readConfig, proxyEnv } from './config'
 import { resolveGrokBinary } from './acp/service'
+import { t } from './i18n'
 import type { McpServer, McpServerInput, McpTransport } from '../shared/types'
 
 const execFileAsync = promisify(execFile)
@@ -64,7 +65,7 @@ function tokenize(input: string): string[] {
 async function runGrok(args: string[], opts: { timeout?: number } = {}): Promise<{ stdout: string; stderr: string }> {
   const binary = resolveGrokBinary()
   if (!binary) {
-    throw new Error('未找到 grok 可执行文件。请确认已安装 Grok Build，或设置环境变量 GROK_BIN。')
+    throw new Error(t('mainErrors.grokCli.binaryMissing'))
   }
   try {
     return await execFileAsync(binary, args, {
@@ -75,8 +76,10 @@ async function runGrok(args: string[], opts: { timeout?: number } = {}): Promise
     })
   } catch (err) {
     const e = err as { stdout?: string; stderr?: string; message?: string }
-    const msg = (e.stdout || e.stderr || e.message || '操作失败').toString().trim()
-    throw new Error(msg || 'grok mcp 命令执行失败')
+    const msg = (e.stdout || e.stderr || e.message || t('mainErrors.grokCli.operationFailed'))
+      .toString()
+      .trim()
+    throw new Error(msg || t('mainErrors.grokCli.operationFailed'))
   }
 }
 
@@ -96,7 +99,7 @@ export async function listMcpServers(): Promise<McpServer[]> {
 /** 新增或按同名更新一个服务器，返回最新列表 */
 export async function addMcpServer(input: McpServerInput): Promise<McpServer[]> {
   const name = input.name.trim()
-  if (!name) throw new Error('服务器名称不能为空。')
+  if (!name) throw new Error(t('mainErrors.grokCli.serverNameRequired'))
 
   const args: string[] = ['mcp', 'add', name, '--scope', 'user']
 
@@ -112,10 +115,10 @@ export async function addMcpServer(input: McpServerInput): Promise<McpServer[]> 
 
   if (input.transport === 'stdio') {
     const tokens = tokenize(input.commandLine ?? '')
-    if (tokens.length === 0) throw new Error('stdio 服务器需要填写启动命令。')
+    if (tokens.length === 0) throw new Error(t('mainErrors.grokCli.stdioCommandRequired'))
     args.push('--', ...tokens)
   } else {
-    if (!input.url?.trim()) throw new Error('远程 MCP 服务器需要填写连接地址（URL）。')
+    if (!input.url?.trim()) throw new Error(t('mainErrors.grokCli.remoteUrlRequired'))
     args.push(input.url.trim())
   }
 
@@ -142,7 +145,7 @@ export async function runMcpDoctor(name: string | null): Promise<string> {
   try {
     const { stdout, stderr } = await runGrok(args, { timeout: 30_000 })
     const text = (stdout || stderr || '').trim()
-    return text || '诊断完成，无输出。'
+    return text || t('mainErrors.grokCli.diagDoneNoOutput')
   } catch (err) {
     const e = err as { stdout?: string; stderr?: string; message?: string }
     const text = (e.stdout || e.stderr || e.message || '').toString().trim()

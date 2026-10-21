@@ -8,6 +8,8 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { EventEmitter } from 'node:events'
 
+import { t } from '../i18n'
+
 interface PendingCall {
   method: string
   resolve: (value: unknown) => void
@@ -56,7 +58,7 @@ export class AcpClient extends EventEmitter<AcpClientEvents> {
   }
 
   start(): void {
-    if (this.proc) throw new Error('AcpClient 已在运行')
+    if (this.proc) throw new Error(t('mainErrors.service.alreadyRunning'))
 
     const proc = spawn(this.options.binary, this.options.args, {
       cwd: this.options.cwd,
@@ -77,7 +79,9 @@ export class AcpClient extends EventEmitter<AcpClientEvents> {
     proc.on('exit', (code, signal) => {
       this.proc = null
       const err = new Error(
-        `agent 进程已退出（code=${code ?? 'null'}${signal ? `, signal=${signal}` : ''}）`
+        t('mainErrors.service.exited', {
+          code: `${code ?? 'null'}${signal ? `, signal=${signal}` : ''}`
+        })
       )
       for (const [, call] of this.pending) {
         clearTimeout(call.timer)
@@ -92,14 +96,14 @@ export class AcpClient extends EventEmitter<AcpClientEvents> {
   request<T = unknown>(method: string, params: unknown, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> {
     const proc = this.proc
     if (!proc || !proc.stdin.writable) {
-      return Promise.reject(new Error('agent 进程未就绪，无法发送请求'))
+      return Promise.reject(new Error(t('mainErrors.service.agentNotReady')))
     }
 
     const id = this.nextId++
     return new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id)
-        reject(new Error(`请求超时：${method}`))
+        reject(new Error(t('mainErrors.service.requestTimeout', { method })))
       }, timeoutMs)
 
       this.pending.set(id, {
@@ -174,7 +178,14 @@ export class AcpClient extends EventEmitter<AcpClientEvents> {
             : err.data != null
               ? JSON.stringify(err.data)
               : ''
-        call.reject(new Error(`${call.method} 失败：${data ? `${head}（${data}）` : head}`))
+        call.reject(
+          new Error(
+            t('mainErrors.service.methodFailed', {
+              method: call.method,
+              detail: data ? `${head} (${data})` : head
+            })
+          )
+        )
       } else {
         call.resolve(message.result ?? {})
       }

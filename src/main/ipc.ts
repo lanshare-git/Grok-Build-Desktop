@@ -307,7 +307,7 @@ export function registerIpc(service: AgentService): void {
       rect: { x: number; y: number; width: number; height: number }
     ): Promise<Uint8Array> => {
       const win = BrowserWindow.fromWebContents(event.sender)
-      if (!win) throw new Error('窗口不可用')
+      if (!win) throw new Error(t('mainErrors.longShot.windowUnavailable'))
       const x = Math.max(0, Math.round(Number(rect?.x) || 0))
       const y = Math.max(0, Math.round(Number(rect?.y) || 0))
       const width = Math.max(1, Math.round(Number(rect?.width) || 0))

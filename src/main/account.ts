@@ -16,6 +16,7 @@ import { promisify } from 'node:util'
 
 import { proxyEnv, readConfig } from './config'
 import { resolveGrokBinary } from './acp/service'
+import { t } from './i18n'
 import type { GrokAccount } from '../shared/types'
 
 const execFileAsync = promisify(execFile)
@@ -72,7 +73,7 @@ export function getAccountInfo(): GrokAccount | null {
 export async function logoutAccount(): Promise<void> {
   const binary = resolveGrokBinary()
   if (!binary) {
-    throw new Error('未找到 grok 可执行文件。请确认已安装 Grok Build，或设置环境变量 GROK_BIN。')
+    throw new Error(t('mainErrors.grokCli.binaryMissing'))
   }
   try {
     await execFileAsync(binary, ['logout'], {
@@ -83,7 +84,9 @@ export async function logoutAccount(): Promise<void> {
     })
   } catch (err) {
     const e = err as { stdout?: string; stderr?: string; message?: string }
-    const msg = (e.stdout || e.stderr || e.message || '退出登录失败').toString().trim()
-    throw new Error(msg || 'grok logout 执行失败')
+    const msg = (e.stdout || e.stderr || e.message || t('mainErrors.grokCli.logoutFailed'))
+      .toString()
+      .trim()
+    throw new Error(msg || t('mainErrors.grokCli.logoutFailed'))
   }
 }

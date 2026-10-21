@@ -57,13 +57,25 @@ export const mainErrors: typeof zh = {
     worktreeRemoved: 'worktree を削除しました。',
     loginFinished: 'ログインフローが終了しました。',
     loginTimeout:
-      'ログイン待機がタイムアウトしました（5 分以内にブラウザ認可が完了しませんでした）。再試行するか、ターミナルで grok login を実行してください。'
+      'ログイン待機がタイムアウトしました（5 分以内にブラウザ認可が完了しませんでした）。再試行するか、ターミナルで grok login を実行してください。',
+    logoutFailed: 'ログアウトに失敗しました',
+    serverNameRequired: 'サーバー名を入力してください。',
+    remoteUrlRequired: 'リモート MCP サーバーには接続 URL が必要です。',
+    stdioCommandRequired: 'stdio サーバーには起動コマンドが必要です。',
+    diagDoneNoOutput: '診断が完了しました（出力なし）。'
   },
   exportMarkdown: {
-    dialogTitle: 'セッションを Markdown としてエクスポート'
+    dialogTitle: 'セッションを Markdown としてエクスポート',
+    nothingToExport: 'このセッションにはディスク上にエクスポート可能な内容がありません（まだ保存されていない可能性があります）。',
+    metaSessionId: (vars) => `- セッション ID：${vars.id}`,
+    metaCwd: (vars) => `- 作業ディレクトリ：${vars.cwd}`,
+    roleMe: '自分',
+    footerLocal: (vars) =>
+      `${vars.at} にエクスポート（デスクトップクライアントによるフォールバック描画、grok export の生出力ではありません）`
   },
   longShot: {
-    dialogTitle: 'セッション長截図を保存'
+    dialogTitle: 'セッション長截図を保存',
+    windowUnavailable: 'ウィンドウが利用できません'
   },
   /** acp/service.ts から接続状態・prompt エラーとしてユーザーに見える文字列 */
   service: {
@@ -72,7 +84,18 @@ export const mainErrors: typeof zh = {
     exited: (vars) => `agent プロセスが終了しました（code=${vars.code}）`,
     ready: 'agent が準備完了',
     stopped: '停止済み',
-    emptyContent: 'メッセージ内容が空です'
+    emptyContent: 'メッセージ内容が空です',
+    requestTimeout: (vars) => `リクエストがタイムアウトしました：${vars.method}`,
+    alreadyRunning: 'agent クライアントはすでに実行中です',
+    agentNotReady: 'agent プロセスが準備できていないため、リクエストを送信できません',
+    methodFailed: (vars) => `${vars.method} に失敗しました：${vars.detail}`
+  },
+  /** proxy.ts のプロキシ/エンドポイント疎通確認 detail（診断パネルの detail に埋め込まれる） */
+  proxy: {
+    unparsable: (vars) => `プロキシアドレスを解析できません：${vars.url}`,
+    reachable: (vars) => `${vars.addr} に接続できます`,
+    unreachable: (vars) => `${vars.addr} に接続できません`,
+    timeout: '接続がタイムアウトしました'
   },
   /** billing.ts の残高取得失敗理由（AccountMenu の残高行に表示） */
   billing: {

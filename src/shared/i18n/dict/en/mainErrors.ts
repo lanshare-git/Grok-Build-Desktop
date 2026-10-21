@@ -57,13 +57,25 @@ export const mainErrors: typeof zh = {
     worktreeRemoved: 'Worktree removed.',
     loginFinished: 'The login flow has finished.',
     loginTimeout:
-      'Sign-in timed out (no browser authorization within 5 minutes). Retry, or run grok login in a terminal.'
+      'Sign-in timed out (no browser authorization within 5 minutes). Retry, or run grok login in a terminal.',
+    logoutFailed: 'Sign-out failed',
+    serverNameRequired: 'Server name cannot be empty.',
+    remoteUrlRequired: 'A remote MCP server requires a connection URL.',
+    stdioCommandRequired: 'A stdio server requires a launch command.',
+    diagDoneNoOutput: 'Diagnostics finished with no output.'
   },
   exportMarkdown: {
-    dialogTitle: 'Export session as Markdown'
+    dialogTitle: 'Export session as Markdown',
+    nothingToExport: 'This session has nothing exportable on disk (it may not have been saved yet).',
+    metaSessionId: (vars) => `- Session ID: ${vars.id}`,
+    metaCwd: (vars) => `- Working directory: ${vars.cwd}`,
+    roleMe: 'Me',
+    footerLocal: (vars) =>
+      `Exported at ${vars.at} (fallback rendering by the desktop client, not raw grok export output)`
   },
   longShot: {
-    dialogTitle: 'Save session long screenshot'
+    dialogTitle: 'Save session long screenshot',
+    windowUnavailable: 'Window unavailable'
   },
   /** User-visible strings from acp/service.ts surfaced in connection state and prompt errors */
   service: {
@@ -72,7 +84,18 @@ export const mainErrors: typeof zh = {
     exited: (vars) => `agent process exited (code=${vars.code})`,
     ready: 'agent is ready',
     stopped: 'Stopped',
-    emptyContent: 'Message content is empty'
+    emptyContent: 'Message content is empty',
+    requestTimeout: (vars) => `Request timed out: ${vars.method}`,
+    alreadyRunning: 'The agent client is already running',
+    agentNotReady: 'The agent process is not ready; cannot send the request',
+    methodFailed: (vars) => `${vars.method} failed: ${vars.detail}`
+  },
+  /** proxy.ts proxy/endpoint probe details (embedded into diagnostics panel details) */
+  proxy: {
+    unparsable: (vars) => `Cannot parse proxy address: ${vars.url}`,
+    reachable: (vars) => `${vars.addr} is reachable`,
+    unreachable: (vars) => `${vars.addr} is unreachable`,
+    timeout: 'Connection timed out'
   },
   /** billing.ts quota fetch failure reasons (shown in the AccountMenu quota row) */
   billing: {

@@ -490,7 +490,7 @@ function upsertTool(items: ChatItem[], update: SessionUpdateEnvelope, at = Date.
       kind: 'tool',
       id: uid(),
       toolCallId,
-      title: update.title ?? '工具调用',
+      title: update.title ?? tShared(useStore.getState().locale, 'tool.fallbackTitle'),
       toolKind: update.kind,
       toolName: update.toolName,
       status: update.status ?? 'in_progress',
