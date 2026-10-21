@@ -17,6 +17,7 @@ import ChatView from './components/ChatView'
 import CloseActionDialog from './components/CloseActionDialog'
 import BackgroundTasksBar from './components/BackgroundTasksBar'
 import Composer from './components/Composer'
+import PlanStatusBar from './components/PlanStatusBar'
 import Header from './components/Header'
 import SettingsDialog from './components/SettingsDialog'
 import TaskPrompts from './components/TaskPrompts'
@@ -267,6 +268,8 @@ export default function App(): JSX.Element {
         </div>
         {/* 任务内嵌「待响应」区：只显示当前任务的授权/提问，固定在输入框上方 */}
         {activeId && <TaskPrompts />}
+        {/* 执行计划：时间线里就地更新，底部另钉一条，避免翻到底看不到进展 */}
+        {activeId && <PlanStatusBar />}
         {/* 后台任务（长命令 / 子代理）：回合结束后仍在跑时要看得见 */}
         {activeId && <BackgroundTasksBar />}
         {activeId && <Composer />}

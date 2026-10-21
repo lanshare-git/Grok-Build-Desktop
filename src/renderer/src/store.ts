@@ -55,7 +55,50 @@ export type SettingsSection =
   | 'about'
 
 const MAX_SESSIONS = 60
-const MAX_ITEMS_PER_SESSION = 400
+/**
+ * 极端兜底上限（正常长对话靠 ChatView 虚拟列表撑 DOM，不靠砍历史）。
+ * 仅在单会话条目失控时触发；仍优先保留全部用户消息。
+ */
+const MAX_ITEMS_PER_SESSION = 20_000
+
+/**
+ * 超限裁剪：保留全部用户气泡，其余名额留给最近的工具/思考/助手消息。
+ */
+function trimSessionItems(items: ChatItem[], max: number, locale: Locale): ChatItem[] {
+  if (items.length <= max) return items
+
+  const userIds = new Set(
+    items.filter((it) => it.kind === 'user').map((it) => it.id)
+  )
+  if (userIds.size >= max) {
+    return items.filter((it) => it.kind === 'user').slice(-max)
+  }
+
+  const budgetForNonUser = max - userIds.size - 1
+  const keep = new Set(userIds)
+  let budget = Math.max(0, budgetForNonUser)
+  for (let i = items.length - 1; i >= 0 && budget > 0; i--) {
+    const it = items[i]
+    if (keep.has(it.id)) continue
+    keep.add(it.id)
+    budget--
+  }
+
+  const out = items.filter((it) => keep.has(it.id))
+  const dropped = items.length - out.length
+  if (dropped <= 0) return out
+
+  const notice: Extract<ChatItem, { kind: 'notice' }> = {
+    kind: 'notice',
+    id: uid(),
+    text: tShared(locale, 'chat.historyTrimmed', { n: dropped, max }),
+    level: 'info',
+    at: out[0]?.at ?? Date.now()
+  }
+  const firstUser = out.findIndex((it) => it.kind === 'user')
+  if (firstUser === -1) return [notice, ...out]
+  return [...out.slice(0, firstUser + 1), notice, ...out.slice(firstUser + 1)]
+}
 
 /** 输入框未发送草稿（按会话记忆；不落盘，含图片 base64 太大） */
 export interface ComposerDraft {
@@ -925,8 +968,7 @@ function applyOne(s: AppState, events: AcpStreamEvent[]): Partial<AppState> {
       }
     }
 
-    const trimmed =
-      items.length > MAX_ITEMS_PER_SESSION ? items.slice(-MAX_ITEMS_PER_SESSION) : items
+    const trimmed = trimSessionItems(items, MAX_ITEMS_PER_SESSION, s.locale)
 
     // 只有「真有内容产出」的通知才算新活动。
     //  · 重放期间（suppressActivityUntil）收到的一律不算 —— 否则点开会话就会顶到最前

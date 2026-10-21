@@ -17,6 +17,8 @@ export const chat: typeof zh = {
   readyLine2:
     'Agent はファイルの読み書き、コマンド実行、コード検索ができます。ターミナル版 Grok Build と同等の能力です。',
   agentWorking: 'Agent が作業中…',
+  historyTrimmed: (vars: { n: number; max: number }) =>
+    `会話が長いため、古いツール/思考 ${vars.n} 件を折りたたみました（表示上限約 ${vars.max}）。あなたのメッセージは残します。`,
   turnIdleCancelled:
     '5 分以上出力がないため、このターンを自動終了しました。続けてメッセージを送るか、■ で停止して再試行してください。',
   longShotPickHint: '起点にするメッセージをクリックすると、末尾まで長截図します',

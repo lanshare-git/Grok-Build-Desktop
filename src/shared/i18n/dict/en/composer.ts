@@ -31,6 +31,6 @@ export const composer: typeof zh = {
   worktreeCreated: (vars: { path: string }) => `New task created in worktree: ${vars.path}`,
   worktreeFailed: (vars: { message?: string }) =>
     `Failed to create worktree: ${vars.message || 'unknown error'}`,
-  queueSendTitle: 'Queue send (runs after the current turn finishes)',
-  queuedHint: 'Queued: it will be sent automatically when the current turn ends (click ■ on the left to interrupt instead)'
+  queueSendTitle: 'Send guidance (runs after the current turn; clear the box to get ■ and stop now)',
+  queuedHint: 'Queued: sent when the current turn ends (clear the input to show ■ and stop now)'
 }

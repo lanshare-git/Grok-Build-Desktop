@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 
 import { editAndResend } from '../actions'
 import { useLocale, useT, type Locale } from '../i18n'
@@ -8,7 +9,6 @@ import { sessionDisplayTitle } from '../utils'
 import type { ChatItem, ImageAttachment, MediaAttachment } from '@shared/types'
 import { isAgentNoiseOnly } from '@shared/agent-noise'
 
-type ToolItem = Extract<ChatItem, { kind: 'tool' }>
 import Markdown from './Markdown'
 import PlanPanel from './PlanPanel'
 import ThinkingBlock from './ThinkingBlock'
@@ -17,6 +17,9 @@ import ToolGroupCard from './ToolGroupCard'
 import ZoomableImage from './ZoomableImage'
 import { densityGroupsTools } from '@shared/types'
 import { IconCopy, IconEdit } from './Icons'
+
+type ToolItem = Extract<ChatItem, { kind: 'tool' }>
+type DisplayItem = ChatItem | { kind: 'tool-group'; id: string; items: ToolItem[] }
 
 /** selector 空态必须稳定引用，否则每次渲染都是新数组 → zustand 无限重渲染 */
 const EMPTY_PENDING: Extract<ChatItem, { kind: 'user' }>[] = []
@@ -314,17 +317,25 @@ export default function ChatView(): JSX.Element {
   // 「紧凑 + 分组 / 最紧凑」档：把**连续的同种**工具调用折成一张汇总卡（grok 1.0.52 同义行为）。
   // 必须在渲染前做，且用 useMemo 缓存 —— 否则每次 keystroke 都会重扫几百条 items。
   const groupTools = useStore((s) => densityGroupsTools(s.toolCallDensity))
-  const items = useMemo(() => {
-    if (!groupTools) return rawItems
-    const out: Array<ChatItem | { kind: 'tool-group'; id: string; items: ToolItem[] }> = []
-    for (const item of rawItems) {
+  const items = useMemo((): DisplayItem[] => {
+    // 先丢掉纯 system-reminder，避免虚拟列表出现空行占位
+    const cleaned = rawItems.filter(
+      (item) =>
+        !(
+          item.kind === 'user' &&
+          isAgentNoiseOnly(item.text) &&
+          !(item.images && item.images.length > 0)
+        )
+    )
+    if (!groupTools) return cleaned
+    const out: DisplayItem[] = []
+    for (const item of cleaned) {
       const last = out[out.length - 1]
       const canJoin =
         item.kind === 'tool' &&
         last?.kind === 'tool-group' &&
         (last.items[0].toolName || last.items[0].title) === (item.toolName || item.title)
       if (canJoin) {
-        // 连续同工具才合并；夹了别的类型就自然断开（上面 canJoin 已保证）
         ;(last as { items: ToolItem[] }).items.push(item)
         continue
       }
@@ -337,16 +348,34 @@ export default function ChatView(): JSX.Element {
     return out
   }, [rawItems, groupTools])
 
+  /**
+   * 长截屏需要整棵 DOM（会滚动采集），选点/截取期间退回全量渲染。
+   * 其余时候虚拟列表：只挂可视区附近节点，长对话仍可翻到开头。
+   */
+  const useVirtual = items.length >= 32 && !longShotPicking && !longShotBusy
+
+  const rowVirtualizer = useVirtualizer({
+    count: useVirtual ? items.length : 0,
+    getScrollElement: () => scrollerRef.current,
+    estimateSize: () => 72,
+    overscan: 12,
+    getItemKey: (index) => items[index]?.id ?? index
+  })
+
   // 切换会话时退出编辑态
   useEffect(() => {
     setEditingId(null)
   }, [session?.id])
 
-  // 用户向上翻阅时不打断；贴底时自动跟随
+  // 用户向上翻阅时不打断；贴底时自动跟随（含 running-row，直接滚到底比 scrollToIndex 稳）
   useEffect(() => {
+    if (!pinnedRef.current) return
     const el = scrollerRef.current
-    if (!el || !pinnedRef.current) return
-    el.scrollTop = el.scrollHeight
+    if (!el) return
+    requestAnimationFrame(() => {
+      if (!pinnedRef.current || !scrollerRef.current) return
+      scrollerRef.current.scrollTop = scrollerRef.current.scrollHeight
+    })
   }, [items, running])
 
   const handleScroll = (): void => {
@@ -358,6 +387,107 @@ export default function ChatView(): JSX.Element {
   const handleSubmitEdit = (itemId: string, text: string, images?: ImageAttachment[]): void => {
     setEditingId(null)
     void editAndResend(itemId, text, images)
+  }
+
+  const renderDisplayItem = (item: DisplayItem): ReactNode => {
+    switch (item.kind) {
+      case 'user':
+        if (editingId === item.id) {
+          return (
+            <UserEditBox
+              initial={item.text}
+              images={item.images}
+              onCancel={() => setEditingId(null)}
+              onSubmit={(text, images) => handleSubmitEdit(item.id, text, images)}
+            />
+          )
+        }
+        return (
+          <div className="msg msg-user" data-long-shot-target="">
+            <div className="user-col">
+              <div className="bubble">
+                {item.images && item.images.length > 0 && (
+                  <div className="bubble-images">
+                    {item.images.map((img, i) => (
+                      <ZoomableImage
+                        key={i}
+                        src={`data:${img.mimeType};base64,${img.data}`}
+                        alt={img.name ?? t('chat.imageFallback')}
+                      />
+                    ))}
+                  </div>
+                )}
+                {item.text}
+              </div>
+              <div className="msg-meta">
+                <span className="msg-time">{formatTime(item.at, locale)}</span>
+                <button
+                  className="msg-icon-btn"
+                  title={t('common.copy')}
+                  onClick={() => copyText(item.text)}
+                >
+                  <IconCopy size={13} />
+                </button>
+                {!running && (
+                  <button
+                    className="msg-icon-btn"
+                    title={t('chat.edit')}
+                    onClick={() => setEditingId(item.id)}
+                  >
+                    <IconEdit size={13} />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      case 'assistant': {
+        const media = item.media && item.media.length > 0 ? item.media : extractEmbeddedMedia(item.text)
+        return (
+          <div className="msg msg-assistant" data-long-shot-target="">
+            <Markdown text={item.text} />
+            {media.length > 0 && <MediaView media={media} />}
+            {item.streaming && running && <span className="caret" />}
+          </div>
+        )
+      }
+      case 'thinking':
+        return (
+          <div data-long-shot-target="">
+            <ThinkingBlock item={item} />
+          </div>
+        )
+      case 'tool':
+        return (
+          <div data-long-shot-target="">
+            <ToolCallCard item={item} />
+          </div>
+        )
+      case 'tool-group':
+        return item.items.length > 1 ? (
+          <div data-long-shot-target="">
+            <ToolGroupCard items={item.items} />
+          </div>
+        ) : (
+          <div data-long-shot-target="">
+            <ToolCallCard item={item.items[0]} />
+          </div>
+        )
+      case 'plan':
+        return (
+          <div data-long-shot-target="">
+            <PlanPanel item={item} />
+          </div>
+        )
+      case 'notice':
+        return (
+          <div className={`notice notice-${item.level}`} data-long-shot-target="">
+            {item.text}
+          </div>
+        )
+      default:
+        return null
+    }
   }
 
   const runLongShot = async (startEl: HTMLElement): Promise<void> => {
@@ -520,121 +650,34 @@ export default function ChatView(): JSX.Element {
           </div>
         )}
 
-        {items.map((item) => {
-          switch (item.kind) {
-            case 'user':
-              // agent 注入的 system-reminder（后台任务完成等）不是用户发的，不画气泡
-              if (
-                isAgentNoiseOnly(item.text) &&
-                !(item.images && item.images.length > 0)
-              ) {
-                return null
-              }
-              if (editingId === item.id) {
-                return (
-                  <UserEditBox
-                    key={item.id}
-                    initial={item.text}
-                    images={item.images}
-                    onCancel={() => setEditingId(null)}
-                    onSubmit={(text, images) => handleSubmitEdit(item.id, text, images)}
-                  />
-                )
-              }
-              return (
-                <div key={item.id} className="msg msg-user" data-long-shot-target="">
-                  <div className="user-col">
-                    <div className="bubble">
-                      {item.images && item.images.length > 0 && (
-                        <div className="bubble-images">
-                          {item.images.map((img, i) => (
-                            <ZoomableImage
-                              key={i}
-                              src={`data:${img.mimeType};base64,${img.data}`}
-                              alt={img.name ?? t('chat.imageFallback')}
-                            />
-                          ))}
-                        </div>
-                      )}
-                      {item.text}
-                    </div>
-                    <div className="msg-meta">
-                      <span className="msg-time">{formatTime(item.at, locale)}</span>
-                      <button
-                        className="msg-icon-btn"
-                        title={t('common.copy')}
-                        onClick={() => copyText(item.text)}
-                      >
-                        <IconCopy size={13} />
-                      </button>
-                      {!running && (
-                        <button
-                          className="msg-icon-btn"
-                          title={t('chat.edit')}
-                          onClick={() => setEditingId(item.id)}
-                        >
-                          <IconEdit size={13} />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )
-            case 'assistant': {
-              const media = item.media && item.media.length > 0 ? item.media : extractEmbeddedMedia(item.text)
-              // 光标只在「本会话正在跑」时显示。turn 没收尾时 streaming 会残留并被
-              // persist 回来，已完成会话末尾就会永久闪黑块（本会话 1819895 就是此状）。
-              return (
-                <div key={item.id} className="msg msg-assistant" data-long-shot-target="">
-                  <Markdown text={item.text} />
-                  {media.length > 0 && <MediaView media={media} />}
-                  {item.streaming && running && <span className="caret" />}
-                </div>
-              )
-            }
-            case 'thinking':
-              return (
-                <div key={item.id} data-long-shot-target="">
-                  <ThinkingBlock item={item} />
-                </div>
-              )
-            case 'tool':
-              return (
-                <div key={item.id} data-long-shot-target="">
-                  <ToolCallCard item={item} />
-                </div>
-              )
-            case 'tool-group':
-              // 只有一张时退回普通卡片，避免为单次调用平白多一层壳
-              return item.items.length > 1 ? (
-                <div key={item.id} data-long-shot-target="">
-                  <ToolGroupCard items={item.items} />
-                </div>
-              ) : (
-                <div key={item.items[0].id} data-long-shot-target="">
-                  <ToolCallCard item={item.items[0]} />
-                </div>
-              )
-            case 'plan':
-              return (
-                <div key={item.id} data-long-shot-target="">
-                  <PlanPanel item={item} />
-                </div>
-              )
-            case 'notice':
+        {useVirtual ? (
+          <div
+            className="chat-virtual"
+            style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
+          >
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const item = items[virtualRow.index]
+              if (!item) return null
               return (
                 <div
-                  key={item.id}
-                  className={`notice notice-${item.level}`}
-                  data-long-shot-target=""
+                  key={virtualRow.key}
+                  data-index={virtualRow.index}
+                  ref={rowVirtualizer.measureElement}
+                  className="chat-virtual-row"
+                  style={{ transform: `translateY(${virtualRow.start}px)` }}
                 >
-                  {item.text}
+                  {renderDisplayItem(item)}
                 </div>
               )
-            default:
-              return null
-          }
-        })}
+            })}
+          </div>
+        ) : (
+          items.map((item) => (
+            <div key={item.id} className="chat-row">
+              {renderDisplayItem(item)}
+            </div>
+          ))
+        )}
 
         {running && !longShotBusy && (
           <div className="running-row">

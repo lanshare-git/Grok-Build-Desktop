@@ -26,6 +26,6 @@ export const composer = {
   worktreeConfirmOk: '创建并新建',
   worktreeCreated: (vars: { path: string }) => `已在 worktree 中新建任务：${vars.path}`,
   worktreeFailed: (vars: { message?: string }) => `创建 worktree 失败：${vars.message || '未知错误'}`,
-  queueSendTitle: '排队发送（当前回合结束后执行）',
-  queuedHint: '已排队：当前回合结束后自动发送（不想等可点左侧 ■ 中断）'
+  queueSendTitle: '发送引导（当前回合结束后执行；要立刻停请清空输入后点 ■）',
+  queuedHint: '已排队：当前回合结束后自动发送（要立刻停请清空输入，按钮会变回 ■）'
 }

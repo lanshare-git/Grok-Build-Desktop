@@ -1019,6 +1019,19 @@ pre {
   position: relative;
 }
 
+/* 虚拟列表：占位总高 + 行绝对定位，只挂可视区附近 DOM */
+.chat-virtual {
+  width: 100%;
+  position: relative;
+}
+.chat-virtual-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  will-change: transform;
+}
+
 /* 长截屏选点：十字光标 + 悬停描边，提示可点 */
 .chat.is-long-shot-picking {
   cursor: crosshair;
@@ -1990,6 +2003,60 @@ pre {
   font-size: 11px;
   color: var(--text-muted);
   flex-shrink: 0;
+}
+
+/* ---------- 执行计划条（输入框上方） ---------- */
+
+.plan-bar {
+  border-top: 1px solid var(--border);
+  background: var(--bg-subtle);
+  padding: 0 28px;
+}
+.plan-bar.has-active {
+  background: color-mix(in srgb, var(--accent-soft) 55%, var(--bg));
+}
+.plan-bar-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 0;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 12.3px;
+  cursor: pointer;
+  text-align: left;
+}
+.plan-bar-spinner {
+  width: 12px;
+  height: 12px;
+  border-width: 1.5px;
+}
+.plan-bar-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-weight: 500;
+}
+.plan-bar-chevron {
+  flex-shrink: 0;
+  opacity: 0.55;
+  transition: transform 0.15s ease;
+}
+.plan-bar-chevron.is-open {
+  transform: rotate(90deg);
+}
+.plan-bar-list {
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
 }
 
 /* ---------- 后台任务条（输入框上方） ---------- */

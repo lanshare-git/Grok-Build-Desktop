@@ -466,22 +466,23 @@ export default function Composer(): JSX.Element {
           }}
           onKeyDown={onKeyDown}
           onPaste={onPaste}
-          /* 响应中**不禁用**：可以提前打好下一条，发送即排队（竞品 Cursor 同款体验） */
+          /* 响应中**不禁用**：可以提前打好下一条，发送即排队 */
         />
-        {/* 响应中：stop 与 send **并存** —— 想打断点 stop，想补充点 send（排队） */}
-        {running && (
+        {/* 响应中同一位置二选一：无草稿 → ■ 打断；有输入/附图 → ➤ 排队发送引导 */}
+        {running && !text.trim() && attachments.length === 0 ? (
           <button className="btn btn-stop" onClick={cancelCurrent} title={t('composer.stop')}>
             <IconStop size={15} />
           </button>
+        ) : (
+          <button
+            className="btn btn-send"
+            onClick={submit}
+            disabled={!text.trim() && attachments.length === 0}
+            title={running ? t('composer.queueSendTitle') : t('composer.send')}
+          >
+            <IconSend size={15} />
+          </button>
         )}
-        <button
-          className="btn btn-send"
-          onClick={submit}
-          disabled={!text.trim() && attachments.length === 0}
-          title={running ? t('composer.queueSendTitle') : t('composer.send')}
-        >
-          <IconSend size={15} />
-        </button>
       </div>
       {queued && running && (
         <div className="composer-hint">

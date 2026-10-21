@@ -17,6 +17,8 @@ export const chat: typeof zh = {
   readyLine2:
     'The agent can read/write files, run commands, and search code — same capabilities as terminal Grok Build.',
   agentWorking: 'Agent is working…',
+  historyTrimmed: (vars: { n: number; max: number }) =>
+    `Conversation is long — ${vars.n} earlier tool/thinking items were folded (UI keeps ~${vars.max}). Your messages are kept.`,
   turnIdleCancelled:
     'No new output for over 5 minutes — this turn was ended automatically. Send another message to continue, or press Stop and retry.',
   longShotPickHint: 'Click a message as the start — capture continues to the bottom',

@@ -31,6 +31,6 @@ export const composer: typeof zh = {
   worktreeCreated: (vars: { path: string }) => `worktree で新規タスクを作成しました：${vars.path}`,
   worktreeFailed: (vars: { message?: string }) =>
     `worktree の作成に失敗しました：${vars.message || '不明なエラー'}`,
-  queueSendTitle: '送信を予約（現在のターン終了後に実行）',
-  queuedHint: '予約済み：現在のターン終了後に自動送信されます（待たずに中断する場合は左の ■ をクリック）'
+  queueSendTitle: '案内を送信（現在のターン終了後；すぐ止めるなら入力を消して ■）',
+  queuedHint: '予約済み：現在のターン終了後に自動送信（すぐ止めるなら入力を消すと ■ に戻ります）'
 }
