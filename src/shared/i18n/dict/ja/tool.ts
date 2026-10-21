@@ -5,11 +5,11 @@ export const tool: typeof zh = {
     pending: '待機中',
     in_progress: '実行中',
     completed: '完了',
-    failed: '失敗',
+    failed: '未成功',
     interrupted: '中断済み'
   },
   group: {
-    failedCount: (vars: { n: number }) => `${vars.n} 件失敗`,
+    failedCount: (vars: { n: number }) => `${vars.n} 件未成功`,
     interruptedCount: (vars: { n: number }) => `${vars.n} 件中断`,
     inProgress: '進行中'
   },

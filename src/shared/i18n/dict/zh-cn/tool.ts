@@ -3,12 +3,13 @@ export const tool = {
     pending: '等待中',
     in_progress: '执行中',
     completed: '已完成',
-    failed: '失败',
+    // 工具返回错误（如目录不存在）是 Agent 试探常态，别写成「失败」像会话崩了
+    failed: '未成功',
     // 客户端兜底态：agent 没给结果，不是「执行失败」，文案必须区分开
     interrupted: '已中断'
   },
   group: {
-    failedCount: (vars: { n: number }) => `${vars.n} 个失败`,
+    failedCount: (vars: { n: number }) => `${vars.n} 个未成功`,
     interruptedCount: (vars: { n: number }) => `${vars.n} 个中断`,
     inProgress: '进行中'
   },

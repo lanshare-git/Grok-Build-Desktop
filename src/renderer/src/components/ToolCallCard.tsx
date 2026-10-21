@@ -29,7 +29,8 @@ const STATUS_KEY: Record<ToolStatus, MessageKey> = {
 
 function StatusGlyph({ status }: { status: ToolStatus }): JSX.Element {
   if (status === 'completed') return <IconCheck size={13} className="status-ok" />
-  if (status === 'failed') return <IconClose size={13} className="status-err" />
+  // 工具返回错误是常态反馈，用弱色；血红留给真正的系统错误
+  if (status === 'failed') return <IconClose size={13} className="status-muted" />
   if (status === 'interrupted') return <IconStop size={13} className="status-warn" />
   if (status === 'in_progress') return <span className="spinner" />
   return <span className="status-idle" />
@@ -98,9 +99,8 @@ function ToolCallCardImpl({ item }: { item: ToolItem }): JSX.Element {
         </span>
       </button>
 
-      {/* 失败/中断原因不藏在展开区：折叠态直接给出（通常一两行），
-          否则用户只看到「失败」「已中断」几个字，得挨个展开才知道出了什么事。
-          完整内容仍在展开区的「输出」里，点击卡片可看全部。 */}
+      {/* 返回内容/中断说明不藏在展开区：折叠态直接给出（弱化色，不当告警条）。
+          完整内容仍在展开区的「输出」里。 */}
       {showReason && outputText && (
         <div
           className={`tool-fail-reason${item.status === 'interrupted' ? ' is-interrupted' : ''}`}

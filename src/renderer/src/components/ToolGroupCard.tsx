@@ -77,7 +77,7 @@ function ToolGroupCardImpl({ items }: { items: ToolItem[] }): JSX.Element {
         <span className="tool-summary">× {items.length}</span>
         {failed > 0 && (
           <span className="tool-status">
-            <IconClose size={13} className="status-err" />
+            <IconClose size={13} className="status-muted" />
             {t('tool.group.failedCount', { n: failed })}
           </span>
         )}

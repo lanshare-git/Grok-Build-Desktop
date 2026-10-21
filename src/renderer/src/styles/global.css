@@ -1754,24 +1754,24 @@ pre {
 .tool-pending {
   border-left-color: var(--border-strong);
 }
+/* 工具返回错误（目录不存在、权限拒绝等）是 Agent 试探时的常态反馈，
+   不加血红底——那会像会话崩了。竖条用弱色，和「已完成」仍可区分。 */
 .tool-failed {
-  border-left-color: var(--err);
-  /* 唯一带底色的行：长列表里一眼可见，不会被「去边框」抹平。这是底线，不要退。 */
-  background: var(--err-soft);
+  border-left-color: var(--text-muted);
+  background: transparent;
 }
-/* 中断：只有竖条变色、不加底色 —— 它不像失败那样需要「一眼可见」的强提示，
-   但必须和「已完成」区分开，否则用户会以为这个工具跑完了。 */
+/* 中断：只有竖条变色、不加底色 —— 必须和「已完成」区分开。 */
 .tool-interrupted {
   border-left-color: var(--warn);
 }
 
-/* 失败原因：折叠态直接展示（最多 4 行，完整内容在展开区的「输出」里） */
+/* 工具返回内容：折叠态直接展示（最多 4 行）；弱化色，不当成告警条 */
 .tool-fail-reason {
   margin: 2px 10px 4px 28px;
-  padding: 6px 8px;
-  border-radius: var(--radius-sm);
-  background: var(--err-soft);
-  color: var(--err);
+  padding: 2px 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-muted);
   font-size: 11.5px;
   line-height: 1.55;
   white-space: pre-wrap;
@@ -1783,10 +1783,12 @@ pre {
   cursor: pointer;
 }
 .tool-fail-reason:hover {
-  filter: brightness(0.98);
+  color: var(--text);
 }
-/* 中断（客户端兜底）不是失败：换成警示色，别用「失败红」误导 */
+/* 中断（客户端兜底）仍用警示色：那是「没收到结果」，不是工具正常回了错误 */
 .tool-fail-reason.is-interrupted {
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
   background: var(--warn-soft);
   color: var(--warn);
 }
@@ -1874,6 +1876,9 @@ pre {
 }
 .status-err {
   color: var(--err);
+}
+.status-muted {
+  color: var(--text-muted);
 }
 .status-warn {
   color: var(--warn);
@@ -4147,10 +4152,6 @@ a.msg-media-link:hover {
      组外壳又没标 tool-completed，整组就只剩灰条。 */
   background: transparent;
 }
-.tool-group.tool-failed > .tool-head .tool-title {
-  color: var(--err);
-}
-
 /* ------------------------------------------------------------------ *
  *  工具调用展示密度（竖排单选列表）
  *  每档的名称 + 效果描述同时可见，选择前就能比较；
