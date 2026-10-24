@@ -2,6 +2,10 @@
 
 Grok Build 的桌面 Agent 客户端。**不重新实现模型调用**，而是通过 [ACP（Agent Client Protocol）](https://agentclientprotocol.com) 驱动你本机已经装好的终端版 Grok Build —— 登录态、模型、工具链、会话历史、记忆、插件全部直接复用。
 
+> **非官方项目**：本仓库是第三方开源客户端，**与 xAI / Grok / Grok Build 官方无关**，未获其背书。名称中的 “Grok” 仅用于说明兼容的终端版工具链。
+>
+> 许可证：[MIT](./LICENSE)。安全问题请按 [SECURITY.md](./SECURITY.md) 私下报告。
+
 ```
 ┌──────────────────────────────┐
 │  Electron 渲染进程（React）   │  聊天流 / 思考 / 工具卡片 / 计划
@@ -115,9 +119,10 @@ npm run version:major -- "重构了xxx"          # 0.2.0 → 1.0.0
 
 应用内点左下角状态栏 → **环境自检**，会检查可执行文件、配置目录、版本、登录态与令牌有效期、模型清单、模型服务连通性。
 
-命令行下也可以直接验证 ACP 链路：
+命令行下也可以直接验证 ACP 链路（需本机已安装并登录 grok；代理请用环境变量 `HTTP_PROXY` / `HTTPS_PROXY`，或先在应用里配好）：
 
 ```bash
+# 可选：export GROK_BIN=/path/to/grok
 node scripts/acp-probe.mjs
 ```
 
@@ -172,6 +177,9 @@ grok 的模型服务在境外（`cli-chat-proxy.grok.com`）。**grok 只读 `HT
 - 渲染进程开启 `contextIsolation`、关闭 `nodeIntegration`，仅通过 preload 暴露白名单 API
 - 外部链接仅允许 `http/https`
 - Agent 子进程随应用退出而终止
+- **Agent 可读写文件、执行命令**：权限取决于你在界面里选的权限模式，以及 `~/.grok` 里的白名单/规则。在不信任的仓库上请用更严格模式，并认真对待每一次工具授权弹窗
+- **不要提交凭据**：`~/.grok/auth.json`、代理密码、API Key 等只应留在本机；Issue / PR / 截图里打码
+- 打包产物默认**未做代码签名**；Windows SmartScreen / 浏览器下载拦截属于预期现象
 
 ## 目录结构
 
@@ -187,3 +195,7 @@ src/
 ├── renderer/              React 界面
 └── shared/                三端共享类型与通道常量
 ```
+
+## 许可证
+
+[MIT](./LICENSE) — Copyright (c) 2026 FJH

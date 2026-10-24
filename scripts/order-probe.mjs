@@ -2,8 +2,9 @@
 import { spawn } from "node:child_process";
 import readline from "node:readline";
 import { readFileSync } from "node:fs";
+import { resolveGrokBin, resolveProbeCwd } from "./probe-env.mjs";
 
-const GROK = "C:\\Users\\fanji\\.grok\\bin\\grok.exe";
+const GROK = resolveGrokBin();
 // 从文件读，避免中文路径经 shell 传参被破坏
 const CFG = JSON.parse(readFileSync(process.argv[2], "utf8"));
 const SESSION = CFG.sessionId;
@@ -15,8 +16,6 @@ const proc = spawn(GROK, ["agent", "--always-approve", "stdio"], {
   env: {
     ...process.env,
     GROK_DISABLE_AUTOUPDATER: "1",
-    HTTP_PROXY: "socks5h://127.0.0.1:10808",
-    HTTPS_PROXY: "socks5h://127.0.0.1:10808",
   },
 });
 

@@ -1,8 +1,9 @@
 // 探针：完整打印 initialize / session/new 的返回，列出 grok ACP 暴露的全部能力与配置项
 import { spawn } from "node:child_process";
 import readline from "node:readline";
+import { resolveGrokBin, resolveProbeCwd } from "./probe-env.mjs";
 
-const GROK = process.env.GROK_BIN || "C:\\Users\\fanji\\.grok\\bin\\grok.exe";
+const GROK = resolveGrokBin();
 
 const proc = spawn(GROK, ["agent", "--always-approve", "stdio"], {
   stdio: ["pipe", "pipe", "pipe"],

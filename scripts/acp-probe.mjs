@@ -1,8 +1,9 @@
 // ACP stdio probe: verify handshake + one real prompt against `grok agent stdio`
 import { spawn } from "node:child_process";
 import readline from "node:readline";
+import { resolveGrokBin, resolveProbeCwd } from "./probe-env.mjs";
 
-const GROK = process.env.GROK_BIN || "C:\\Users\\fanji\\.grok\\bin\\grok.exe";
+const GROK = resolveGrokBin();
 
 const proc = spawn(GROK, ["agent", "--always-approve", "stdio"], {
   stdio: ["pipe", "pipe", "pipe"],

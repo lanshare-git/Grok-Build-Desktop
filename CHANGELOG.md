@@ -10,6 +10,10 @@
 | 次版本号 +1（minor） | 新增功能 |
 | 主版本号 +1（major） | 不兼容改动 / 大重构 |
 
+## 0.38.4 - 2026-10-24
+
+**修订**　开源准备：补充 LICENSE/SECURITY、清理本机路径、完善 README 声明
+
 ## 0.38.3 - 2026-10-21
 
 **修订**　补齐主进程与工具卡兜底标题的 i18n（account/mcp/session-export/acp-client/proxy/ipc/store，新增 stdioCommandRequired、agentNotReady、methodFailed、exportMarkdown 模板等 12 键）

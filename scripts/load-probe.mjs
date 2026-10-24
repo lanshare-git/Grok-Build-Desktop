@@ -2,18 +2,21 @@
 // 用法: node scripts/load-probe.mjs [sessionId] [cwd]
 import { spawn } from "node:child_process";
 import readline from "node:readline";
+import { resolveGrokBin, resolveProbeCwd } from "./probe-env.mjs";
 
-const GROK = process.env.GROK_BIN || "C:\\Users\\fanji\\.grok\\bin\\grok.exe";
-const SESSION = process.argv[2] || "01a12ec6-ae9d-7f40-8eb3-815b1ff04d8c";
-const CWD = process.argv[3] || "D:\\需求分析";
+const GROK = resolveGrokBin();
+const SESSION = process.argv[2] || process.env.PROBE_SESSION || "";
+const CWD = process.argv[3] || resolveProbeCwd();
+if (!SESSION) {
+  console.error("Usage: node scripts/load-probe.mjs <sessionId> [cwd]");
+  process.exit(1);
+}
 
 const proc = spawn(GROK, ["agent", "--always-approve", "stdio"], {
   stdio: ["pipe", "pipe", "pipe"],
   env: {
     ...process.env,
     GROK_DISABLE_AUTOUPDATER: "1",
-    HTTP_PROXY: "socks5h://127.0.0.1:10808",
-    HTTPS_PROXY: "socks5h://127.0.0.1:10808",
   },
 });
 

@@ -1,9 +1,10 @@
 // 探针：确认 grok ACP 是否提供配额数据（x.ai/billing、x.ai/session/usage）
 import { spawn } from "node:child_process";
 import readline from "node:readline";
+import { resolveGrokBin, resolveProbeCwd } from "./probe-env.mjs";
 
-const GROK = process.env.GROK_BIN || "C:\\Users\\fanji\\.grok\\bin\\grok.exe";
-const CWD = process.env.PROBE_CWD || "C:\\Users\\fanji";
+const GROK = resolveGrokBin();
+const CWD = resolveProbeCwd();
 
 const proc = spawn(GROK, ["agent", "stdio"], {
   stdio: ["pipe", "pipe", "pipe"],

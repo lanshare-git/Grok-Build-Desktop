@@ -98,13 +98,13 @@ src/
    - **`bypassPermissions` 不等于「绝对不弹」**：deny 规则和 hook 仍生效（types.ts 659 行）。要排查时查 `~/.grok/sessions/<cwd>/permission.toml` 的 `disallowed_*` 段，以及 grok 的 hook 配置。
 5. **安全边界**：渲染进程保持 `contextIsolation` 开启、`nodeIntegration` 关闭，只通过 preload 暴露白名单 API；外部链接仅允许 `http/https`。
 6. **删除操作一律用 Python 直删**（`shutil.rmtree` / `os.remove`）。本环境 `rm` 会被 safe-delete 包装器接管移入回收站，且移动需独占句柄——若文件被 WorkBuddy 自己占用会直接失败。详见下方坑 7。
-7. **`build/` 是脚本产物，不是手工资源**：`icon.ico` + `tray-*.png` + `taskbar-badge-*.png` 等由 `npm run gen:icons`（`scripts/gen-icons.mjs`）生成——白色标志是从设计稿描摹的轮廓多边形（`scripts/icon-outline.json`，even-odd 填充），圆角方底/配色/托盘 badge / 任务栏角标是脚本参数。确定性生成，两次运行字节一致；改外观 = 改 JSON 或参数后重跑，**不要手改二进制**。改了生成器忘重生成会被 `--check` 在构建期暴露。所有产物必须提交进仓库（dev 模式不走打包，直接读 `build/`）。重描轮廓的工具链：`.workbuddy/tmp/trace-outline.py`（依赖 venv 里的 pillow + opencv-python-headless，用法见脚本头注释）。
+7. **`build/` 是脚本产物，不是手工资源**：`icon.ico` + `icon.png` + `icons/*.png` + `tray-*.png` + `taskbar-badge-*.png` 等由 `npm run gen:icons`（`scripts/gen-icons.mjs`）生成——白色标志是从设计稿描摹的轮廓多边形（`scripts/icon-outline.json`，even-odd 填充），圆角方底/配色/托盘 badge / 任务栏角标是脚本参数。确定性生成，两次运行字节一致；改外观 = 改 JSON 或参数后重跑，**不要手改二进制**。改了生成器忘重生成会被 `--check` 在构建期暴露。所有产物必须提交进仓库（dev 模式不走打包，直接读 `build/`）。重描轮廓的工具链：`.workbuddy/tmp/trace-outline.py`（依赖 venv 里的 pillow + opencv-python-headless，用法见脚本头注释）。
 8. **托盘资源走 `build/` + extraResources，不走 src/assets**：`package.json` 的 `extraResources: ["build"]` 把整个 build/ 拷到 `resources/build/`。`src/main/tray.ts` 打包态读 `process.resourcesPath/build/`、开发态读项目 `build/`——与窗口图标 `iconPath()` 同一条通道。**不要学 PeerSync 把托盘图放 src/assets**：那要求源码不编译直接进 asar（PeerSync 用 `__dirname` 相对路径）；Grok Build 的 main 是编译产物（`out/**`），src 下的资源不会进包。托盘状态直接挂 `service.on('state')`（主进程是状态源头，无需 IPC 转发）。
 
 ## 已知坑（踩过的，别重踩）
 
 1. **代理（最易踩）**：grok（Rust 侧）只读 `HTTP_PROXY` / `HTTPS_PROXY` 环境变量，**不读 Windows 系统代理设置**。境外端点 `cli-chat-proxy.grok.com` 必须靠环境变量走代理。桌面端在 spawn agent 时通过 `main/config.ts` 的 `proxyEnv()` 注入，配置存 `userData/config.json`。界面入口：左下角状态栏 → 环境自检 → 网络代理区。
-2. **假 `env` 静默吞命令**：`C:\Users\fanji\.local\bin\env`（PATH 修复脚本，从不 exec）排在 `/usr/bin` 之前，`env -u ELECTRON_RUN_AS_NODE npm run pack` 会输出为空、exit 0、什么都没跑。**可靠写法：`unset ELECTRON_RUN_AS_NODE; npm run pack`**。配套教训：**空输出 + exit 0 ≠ 成功**，构建后必须 `stat -c '%y %n' out/main/index.js dist/win-unpacked/resources/app.asar` 验证 mtime 变化。
+2. **假 `env` 静默吞命令**：若 PATH 里排在 `/usr/bin` 之前有个同名 `env` 包装脚本（只修 PATH、从不真正 exec），`env -u ELECTRON_RUN_AS_NODE npm run pack` 会输出为空、exit 0、什么都没跑。**可靠写法：`unset ELECTRON_RUN_AS_NODE; npm run pack`**。配套教训：**空输出 + exit 0 ≠ 成功**，构建后必须核对 `out/main/index.js` / 打包产物的 mtime 是否更新。
 3. **打包时应用在运行会锁文件**：`dist/win-unpacked` 的 exe 与 app.asar 被占用时报 EnsureEmptyDir 失败。先关运行中的 `Grok Build Desktop.exe`（用 bash 的 `tasklist | grep -i grok` 确认，PowerShell 工具在本环境枚举不到进程、返回空且 exit 0，很误导）。
 4. **robocopy 两个必须**：① 加 `MSYS_NO_PATHCONV=1`，否则 Git Bash 把 `/MIR` 转成 PortableGit 路径、exit=16 一个文件都不复制；② 显式加 `/R:3 /W:2`，默认 `/R:1000000 /W:30` 会在目标被占用时每 30 秒重试、表现为「挂住但不报错」。
 5. **部署到 `app/` 绿版**：`npm run deploy`（= `pack` + `sync-app`）一键完成；或单独 `npm run sync-app` 只做同步。脚本 `scripts/sync-app.mjs` 会自动检测应用是否在运行（占用会导致拷贝失败）、创建 `app/resources/`、成对拷贝 `exe` + `app.asar` 并校验大小。**两个文件必须成对更新**（exe 内嵌 asar 的完整性哈希），缺一不可。手动等价命令（兜底）：`cp "dist/win-unpacked/Grok Build Desktop.exe" app/` + `cp "dist/win-unpacked/resources/app.asar" app/resources/`。验证：`grep -c "<新增文案>" app/resources/app.asar`。
@@ -119,8 +119,9 @@ src/
 
 ## 环境事实
 
-- grok 可执行文件：`~/.grok/bin/grok.exe`
-- 本机可用代理：SOCKS5 `127.0.0.1:10808`（v2rayN / Xray）
+- grok 可执行文件：Windows 常见为 `~/.grok/bin/grok.exe`，Linux/macOS 为 `~/.grok/bin/grok`（可用 `GROK_BIN` 覆盖）
+- 代理：按本机客户端填写（常见 Clash `7890`/`7897`、v2rayN `10808`）；只认环境变量，见 README「网络代理」
 - `.npmrc` 只给 electron / electron-builder-binaries 配了 npmmirror；`registry` 仍指向官方 `registry.npmjs.org`，国内装包慢时可改 `https://registry.npmmirror.com/`
 - 打包固定输出到 `dist/`（`package.json` 的 `build.directories.output`），不要手动指定 `dist-vN`
 - git 分支 `main`；`.gitignore` 已忽略 `node_modules/ dist/ dist-v*/ app/ release/ out/ .workbuddy*/`
+- Probe 脚本统一经 `scripts/probe-env.mjs` 解析路径，**禁止**再硬编码开发者本机用户名/盘符

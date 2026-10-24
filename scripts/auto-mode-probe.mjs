@@ -4,16 +4,15 @@
 // 用法: node scripts/auto-mode-probe.mjs
 import { spawn } from "node:child_process";
 import readline from "node:readline";
+import { resolveGrokBin, resolveProbeCwd } from "./probe-env.mjs";
 
-const GROK = process.env.GROK_BIN || "C:\\Users\\fanji\\.grok\\bin\\grok.exe";
+const GROK = resolveGrokBin();
 
 const proc = spawn(GROK, ["agent", "stdio"], {
   stdio: ["pipe", "pipe", "pipe"],
   env: {
     ...process.env,
     GROK_DISABLE_AUTOUPDATER: "1",
-    HTTP_PROXY: "socks5h://127.0.0.1:10808",
-    HTTPS_PROXY: "socks5h://127.0.0.1:10808",
   },
 });
 

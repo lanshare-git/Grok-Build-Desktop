@@ -13,8 +13,9 @@
 // 用法: node scripts/cancel-tool-probe.mjs
 import { spawn } from "node:child_process";
 import readline from "node:readline";
+import { resolveGrokBin, resolveProbeCwd } from "./probe-env.mjs";
 
-const GROK = process.env.GROK_BIN || "C:\\Users\\fanji\\.grok\\bin\\grok.exe";
+const GROK = resolveGrokBin();
 // 一个明确耗时的命令：Windows 下 sleep 120 秒
 const SLOW_CMD = "Use the bash tool to run exactly: timeout /T 120 /NOBREAK";
 
@@ -23,8 +24,6 @@ const proc = spawn(GROK, ["agent", "stdio"], {
   env: {
     ...process.env,
     GROK_DISABLE_AUTOUPDATER: "1",
-    HTTP_PROXY: "socks5h://127.0.0.1:10808",
-    HTTPS_PROXY: "socks5h://127.0.0.1:10808",
   },
 });
 

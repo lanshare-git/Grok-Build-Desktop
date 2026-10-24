@@ -10,8 +10,9 @@
 // 用法: node scripts/concurrent-prompt-probe.mjs
 import { spawn } from "node:child_process";
 import readline from "node:readline";
+import { resolveGrokBin, resolveProbeCwd } from "./probe-env.mjs";
 
-const GROK = process.env.GROK_BIN || "C:\\Users\\fanji\\.grok\\bin\\grok.exe";
+const GROK = resolveGrokBin();
 const SLOW_PROMPT =
   "Write a detailed 1500-word essay about the history of databases. Take your time and be thorough.";
 const QUICK_PROMPT = "Reply with exactly: PROBE-OK";
@@ -21,8 +22,6 @@ const proc = spawn(GROK, ["agent", "stdio"], {
   env: {
     ...process.env,
     GROK_DISABLE_AUTOUPDATER: "1",
-    HTTP_PROXY: "socks5h://127.0.0.1:10808",
-    HTTPS_PROXY: "socks5h://127.0.0.1:10808",
   },
 });
 
